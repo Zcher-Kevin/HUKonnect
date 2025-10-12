@@ -92,7 +92,11 @@ brew services start mongodb/brew/mongodb-community
 
 # Or check if already running
 brew services list | grep mongodb
+
+#stop the mongoDB service
+brew services stop mongodb/brew/mongodb-community
 ```
+ 
 
 #### 5. Seed Database with Sample Data
 
