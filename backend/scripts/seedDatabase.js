@@ -31,6 +31,7 @@ const seedData = async () => {
         firstName: 'John',
         lastName: 'Doe',
         major: 'Computer Science',
+        minor: 'Mathematics',
         year: 'Junior',
         bio: 'Passionate about coding and technology. Love to help others learn programming.',
         interests: ['Programming', 'Gaming', 'Music']
@@ -42,6 +43,7 @@ const seedData = async () => {
         firstName: 'Jane',
         lastName: 'Smith',
         major: 'Psychology',
+        minor: 'Sociology',
         year: 'Senior',
         bio: 'Psychology major interested in human behavior and mental health.',
         interests: ['Psychology', 'Reading', 'Yoga']
@@ -53,6 +55,7 @@ const seedData = async () => {
         firstName: 'Mike',
         lastName: 'Johnson',
         major: 'Business Administration',
+        minor: 'Economics',
         year: 'Sophomore',
         bio: 'Future entrepreneur looking to network with like-minded individuals.',
         interests: ['Business', 'Networking', 'Sports']
@@ -64,6 +67,7 @@ const seedData = async () => {
         firstName: 'Sarah',
         lastName: 'Wilson',
         major: 'Biology',
+        minor: 'Chemistry',
         year: 'Freshman',
         bio: 'Pre-med student passionate about healthcare and research.',
         interests: ['Medicine', 'Research', 'Volunteering']
