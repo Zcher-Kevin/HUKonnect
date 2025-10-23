@@ -40,6 +40,11 @@ const userSchema = new mongoose.Schema({
     trim: true,
     maxlength: [100, 'Major cannot exceed 100 characters']
   },
+  minor:{
+    type: String,
+    trim: true,
+    maxlength: [100, 'Minor cannot exceed 100 characters']
+  },
   year: {
     type: String,
     enum: ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'Other'],
