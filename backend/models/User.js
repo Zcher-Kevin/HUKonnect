@@ -45,6 +45,9 @@ const userSchema = new mongoose.Schema({
     trim: true,
     maxlength: [100, 'Minor cannot exceed 100 characters']
   },
+  birthDate: { 
+    type: Date 
+  },
   year: {
     type: String,
     enum: ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'Other'],
@@ -85,6 +88,25 @@ const userSchema = new mongoose.Schema({
 // Index for better query performance
 userSchema.index({ email: 1 });
 userSchema.index({ username: 1 });
+
+// Virtual field to get user age
+userSchema.virtual("age").get(function () {
+  if (!this.birthDate) return null;
+
+  const today = new Date();
+  const birthDate = new Date(this.birthDate);
+  
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+
+  // 如果还没过生日，年龄减 1
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+
+  return age;
+});
+userSchema.set("toJSON", { virtuals: true });
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {

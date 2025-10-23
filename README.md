@@ -159,6 +159,14 @@ Expected response:
 
 **📖 See `COMPASS_GUIDE.md` for detailed database exploration instructions**
 
+### test user data ###
+
+1.first cd to backend/scripts
+
+2. run "node test-user-data.js"
+
+3. should see all user and a special user's age
+
 ### Frontend Setup
 
 1. Navigate to the frontend directory:
