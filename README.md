@@ -92,7 +92,11 @@ brew services start mongodb/brew/mongodb-community
 
 # Or check if already running
 brew services list | grep mongodb
+
+#stop the mongoDB service
+brew services stop mongodb/brew/mongodb-community
 ```
+ 
 
 #### 5. Seed Database with Sample Data
 
@@ -154,6 +158,14 @@ Expected response:
 - 📅 **Events Collection** (3 documents): Campus events with dates, locations, and attendee lists
 
 **📖 See `COMPASS_GUIDE.md` for detailed database exploration instructions**
+
+### test user data ###
+
+1.first cd to backend/scripts
+
+2. run "node test-user-data.js"
+
+3. should see all user and a special user's age
 
 ### Frontend Setup
 
