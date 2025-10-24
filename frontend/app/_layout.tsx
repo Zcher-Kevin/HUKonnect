@@ -1,21 +1,16 @@
+// app/_layout.tsx
 import { Stack } from "expo-router";
-import { useEffect } from "react";
-import * as SplashScreen from "expo-splash-screen";
-import "react-native-reanimated";
-
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  useEffect(() => {
-    // Hide splash screen after component mounts
-    SplashScreen.hideAsync();
-  }, []);
-
   return (
-    <Stack>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" />          {/* Welcome */}
+      <Stack.Screen name="auth/login" />     {/* Google login */}
+      <Stack.Screen name="auth/create-account" /> {/* Create account */}
+      <Stack.Screen name="(tabs)" />         {/* existing app tabs */}
       <Stack.Screen name="+not-found" />
     </Stack>
   );
 }
+
+
