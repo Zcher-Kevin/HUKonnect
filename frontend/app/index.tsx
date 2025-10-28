@@ -1,4 +1,13 @@
-import { SafeAreaView, View, Text, Image, TouchableOpacity, StyleSheet, Dimensions, Platform } from "react-native";
+import {
+  SafeAreaView,
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  Dimensions,
+  Platform,
+} from "react-native";
 import { router } from "expo-router";
 
 const MAROON = "#A2172C";
@@ -17,7 +26,7 @@ export default function Welcome() {
       <View style={[styles.card, { width: CARD_W, height: CARD_H }]}>
         <Image
           source={require("../assets/images/logo.png")}
-          style={{ width: LOGO_SIZE, height: LOGO_SIZE }}
+          style={{ width: 2 * LOGO_SIZE, height: 2 * LOGO_SIZE }}
           resizeMode="contain"
         />
       </View>
@@ -46,23 +55,18 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   card: {
-    backgroundColor: "#fff",
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
     elevation: 2,
-    marginTop: 8,
+    marginTop: 10,
   },
   title: {
     fontSize: 28,
     fontWeight: "800",
     color: TEXT,
     textAlign: "center",
-    marginTop: 8,
+    marginTop: -20,
   },
   sub: {
     fontSize: 16,

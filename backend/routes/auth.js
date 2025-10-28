@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 
+const axios = require('axios');
 const router = express.Router();
 
 // Register new user
@@ -12,6 +13,7 @@ router.post('/register', [
     .isLength({ min: 3, max: 30 })
     .withMessage('Username must be between 3 and 30 characters'),
   body('email')
+    .optional({ checkFalsy: true })
     .isEmail()
     .normalizeEmail()
     .withMessage('Please provide a valid email'),
@@ -25,7 +27,11 @@ router.post('/register', [
   body('lastName')
     .trim()
     .notEmpty()
-    .withMessage('Last name is required')
+    .withMessage('Last name is required'),
+  body('nickname')
+    .trim()
+    .optional({ checkFalsy: true })
+    .withMessage('Nickname is optional')
 ], async (req, res) => {
   try {
     // Check for validation errors
@@ -40,10 +46,14 @@ router.post('/register', [
 
     const { username, email, password, firstName, lastName, major, year, bio } = req.body;
 
-    // Check if user already exists
-    const existingUser = await User.findOne({
-      $or: [{ email }, { username }]
-    });
+    // Check if user already exists. If email is provided, check both email and username;
+    // otherwise check username only.
+    let existingUser;
+    if (email) {
+      existingUser = await User.findOne({ $or: [{ email }, { username }] });
+    } else {
+      existingUser = await User.findOne({ username });
+    }
 
     if (existingUser) {
       return res.status(400).json({
@@ -193,6 +203,15 @@ router.get('/verify', async (req, res) => {
       message: 'Invalid token'
     });
   }
+});
+
+// Google OAuth token exchange (temporarily disabled)
+// The original implementation verified Google's id_token, created/returned a
+// local JWT and optionally created a minimal user. That logic is currently
+// commented out so that the project can be worked on without a Google OAuth
+// configuration. Re-enable when you're ready to accept id_tokens again.
+router.post('/google', async (req, res) => {
+  return res.status(501).json({ success: false, message: 'Google auth is temporarily disabled on this server.' });
 });
 
 module.exports = router;

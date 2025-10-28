@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 
 /**
  * ================================
@@ -26,7 +26,7 @@ import { router } from "expo-router";
  *      npm i axios
  */
 import axios from "axios";
-// import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "expo-secure-store";
 const API_BASE = "http://localhost:3000"; // <— change to your server
 
 const MAROON = "#A2172C";
@@ -39,10 +39,23 @@ const { width: W } = Dimensions.get("window");
 const WRAP_W = Math.min(420, W * 0.92);
 
 export default function CreateAccount() {
+  const params = useLocalSearchParams();
+  // If the login flow passed a profile (from Google), prefill first/last name
+  React.useEffect(() => {
+    try {
+      const p = params.profile ? JSON.parse(params.profile as string) : null;
+      if (p?.firstName) setFirst(p.firstName);
+      if (p?.lastName) setLast(p.lastName);
+    } catch (e) {
+      // ignore parse errors
+    }
+  }, [params]);
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
+  const [nickname, setNickname] = useState("");
   const [major, setMajor] = useState("");
   const [minor, setMinor] = useState("");
+  const [studyYear, setStudyYear] = useState("");
   const [day, setDay] = useState("");
   const [month, setMonth] = useState("");
   const [year, setYear] = useState("");
@@ -81,11 +94,58 @@ export default function CreateAccount() {
     const dob = buildDob();
 
     // Retrieve your JWT created during Google sign-in (if you saved one)
-    // const token = await SecureStore.getItemAsync("token");
-    const token = undefined; // <— keep undefined for now if auth not wired yet
+    let token = await SecureStore.getItemAsync("token");
+
+    // If there's no token, attempt to auto-register the user if we have
+    // an email from the login flow (e.g., Google). This lets users who
+    // signed in via Google proceed to fill their profile without a
+    // separate registration step. If no email is available, throw an error
+    // and require the user to sign in first.
+    if (!token) {
+      try {
+        const p = params.profile ? JSON.parse(params.profile as string) : null;
+        const email = p?.email;
+        if (!email) {
+          throw new Error(
+            "No authenticated session found — please sign in first."
+          );
+        }
+
+        // create a sensible username and random password for the local account
+        const localPart = email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "");
+        const usernameCandidate = `${localPart}-${Date.now()
+          .toString()
+          .slice(-4)}`;
+        const randomPassword = Math.random().toString(36).slice(2, 12);
+
+        const registerRes = await axios.post(
+          `${API_BASE}/api/auth/register`,
+          {
+            username: usernameCandidate,
+            email,
+            password: randomPassword,
+            firstName: first.trim(),
+            lastName: last.trim(),
+          },
+          { timeout: 15000 }
+        );
+
+        token = registerRes.data?.token;
+        if (token) {
+          await SecureStore.setItemAsync("token", token);
+        }
+      } catch (regErr: any) {
+        // bubble a helpful error to the UI
+        throw new Error(
+          regErr?.response?.data?.message ||
+            regErr?.message ||
+            "Failed to register user. Please sign in and try again."
+        );
+      }
+    }
 
     const res = await axios.put(
-      `${API_BASE}/users/me/profile`,
+      `${API_BASE}/api/users/me/profile`,
       {
         firstName: first.trim(),
         lastName: last.trim(),
@@ -114,15 +174,12 @@ export default function CreateAccount() {
   const onCreate = async () => {
     try {
       setBusy(true);
-
-      // ====== TODAY (no backend): mock navigation, remove later ======
+      // Call the backend to save the profile. submitProfile will throw on
+      // validation or network errors which we catch below.
+      await submitProfile();
+      // On success, navigate into the app.
       router.replace("/(tabs)");
       return;
-
-      // ====== LATER (backend live): uncomment this block ======
-      // await submitProfile();
-      // router.replace("/(tabs)");
-      // return;
     } catch (err: any) {
       const msg =
         err?.response?.data?.message ||
@@ -138,113 +195,136 @@ export default function CreateAccount() {
     <SafeAreaView style={styles.screen}>
       <ScrollView
         style={{ alignSelf: "stretch" }}
-        contentContainerStyle={[styles.content, { width: WRAP_W }]}
+        contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.header}>Create Account</Text>
+        <View style={styles.wrap}>
+          <Text style={styles.header}>Create Account</Text>
 
-        <Text style={styles.sectionTitle}>Your Information</Text>
+          <Text style={styles.sectionTitle}>Your Information</Text>
 
-        {/* Name row */}
-        <View style={styles.row}>
+          {/* Name row */}
+          <View style={styles.row}>
+            <TextInput
+              placeholder="First Name"
+              placeholderTextColor={SUBTEXT}
+              style={[styles.input, styles.half]}
+              value={first}
+              onChangeText={setFirst}
+              autoCapitalize="words"
+              returnKeyType="next"
+            />
+            <TextInput
+              placeholder="Last Name"
+              placeholderTextColor={SUBTEXT}
+              style={[styles.input, styles.half]}
+              value={last}
+              onChangeText={setLast}
+              autoCapitalize="words"
+              returnKeyType="next"
+            />
+          </View>
+          <View style={styles.row}>
+            <TextInput
+              placeholder="Nickname (Optional)"
+              placeholderTextColor={SUBTEXT}
+              style={[styles.input, { flex: 2 }]}
+              value={nickname}
+              onChangeText={setNickname}
+              autoCapitalize="words"
+              returnKeyType="next"
+            />
+            <TextInput
+              placeholder="Gender"
+              placeholderTextColor={SUBTEXT}
+              style={[styles.input, { flex: 1 }]}
+              value={gender}
+              onChangeText={setGender}
+              autoCapitalize="words"
+              returnKeyType="next"
+            />
+          </View>
           <TextInput
-            placeholder="First Name"
+            placeholder="Major"
             placeholderTextColor={SUBTEXT}
-            style={[styles.input, styles.half]}
-            value={first}
-            onChangeText={setFirst}
-            autoCapitalize="words"
+            style={styles.input}
+            value={major}
+            onChangeText={setMajor}
             returnKeyType="next"
           />
-          <TextInput
-            placeholder="Surname"
-            placeholderTextColor={SUBTEXT}
-            style={[styles.input, styles.half]}
-            value={last}
-            onChangeText={setLast}
-            autoCapitalize="words"
-            returnKeyType="next"
-          />
+
+          <View style={styles.row}>
+            <TextInput
+              placeholder="Minor (Optional)"
+              placeholderTextColor={SUBTEXT}
+              style={[styles.input, { flex: 2 }]}
+              value={minor}
+              onChangeText={setMinor}
+              returnKeyType="next"
+            />
+
+            <TextInput
+              placeholder="Year of Study"
+              placeholderTextColor={SUBTEXT}
+              style={[styles.input, { flex: 1 }]}
+              value={studyYear}
+              onChangeText={setStudyYear}
+              returnKeyType="next"
+            />
+          </View>
+
+          {/* Age split into Day / Month / Year */}
+          <Text style={styles.label}>Age</Text>
+          <View style={styles.row}>
+            <TextInput
+              placeholder="DD"
+              placeholderTextColor={SUBTEXT}
+              style={[styles.input, styles.third]}
+              keyboardType="number-pad"
+              maxLength={2}
+              value={day}
+              onChangeText={(t) => setDay(t.replace(/[^0-9]/g, ""))}
+              returnKeyType="next"
+            />
+            <TextInput
+              placeholder="MM"
+              placeholderTextColor={SUBTEXT}
+              style={[styles.input, styles.third]}
+              keyboardType="number-pad"
+              maxLength={2}
+              value={month}
+              onChangeText={(t) => setMonth(t.replace(/[^0-9]/g, ""))}
+              returnKeyType="next"
+            />
+            <TextInput
+              placeholder="YYYY"
+              placeholderTextColor={SUBTEXT}
+              style={[styles.input, styles.third]}
+              keyboardType="number-pad"
+              maxLength={4}
+              value={year}
+              onChangeText={(t) => setYear(t.replace(/[^0-9]/g, ""))}
+              returnKeyType="next"
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.btn, { width: WRAP_W, opacity: busy ? 0.8 : 1 }]}
+            activeOpacity={0.9}
+            onPress={onCreate}
+            disabled={busy}
+          >
+            {busy ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.btnText}>Create Account</Text>
+            )}
+          </TouchableOpacity>
+
+          <Text style={styles.terms}>
+            By creating an account, you agree to our Terms and{"\n"}Conditions.
+          </Text>
         </View>
-
-        <TextInput
-          placeholder="Major"
-          placeholderTextColor={SUBTEXT}
-          style={styles.input}
-          value={major}
-          onChangeText={setMajor}
-          returnKeyType="next"
-        />
-
-        <TextInput
-          placeholder="Minor"
-          placeholderTextColor={SUBTEXT}
-          style={styles.input}
-          value={minor}
-          onChangeText={setMinor}
-          returnKeyType="next"
-        />
-
-        {/* Age split into Day / Month / Year */}
-        <Text style={styles.label}>Age</Text>
-        <View style={styles.row}>
-          <TextInput
-            placeholder="DD"
-            placeholderTextColor={SUBTEXT}
-            style={[styles.input, styles.third]}
-            keyboardType="number-pad"
-            maxLength={2}
-            value={day}
-            onChangeText={(t) => setDay(t.replace(/[^0-9]/g, ""))}
-            returnKeyType="next"
-          />
-          <TextInput
-            placeholder="MM"
-            placeholderTextColor={SUBTEXT}
-            style={[styles.input, styles.third]}
-            keyboardType="number-pad"
-            maxLength={2}
-            value={month}
-            onChangeText={(t) => setMonth(t.replace(/[^0-9]/g, ""))}
-            returnKeyType="next"
-          />
-          <TextInput
-            placeholder="YYYY"
-            placeholderTextColor={SUBTEXT}
-            style={[styles.input, styles.third]}
-            keyboardType="number-pad"
-            maxLength={4}
-            value={year}
-            onChangeText={(t) => setYear(t.replace(/[^0-9]/g, ""))}
-            returnKeyType="next"
-          />
-        </View>
-
-        <TextInput
-          placeholder="Gender"
-          placeholderTextColor={SUBTEXT}
-          style={styles.input}
-          value={gender}
-          onChangeText={setGender}
-          returnKeyType="done"
-        />
-
-        <TouchableOpacity
-          style={[styles.btn, { width: WRAP_W, opacity: busy ? 0.8 : 1 }]}
-          activeOpacity={0.9}
-          onPress={onCreate}
-          disabled={busy}
-        >
-          {busy ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.btnText}>Create Account</Text>
-          )}
-        </TouchableOpacity>
-
-        <Text style={styles.terms}>
-          By creating an account, you agree to our Terms and{"\n"}Conditions.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -255,22 +335,34 @@ const RADIUS = 20;
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+    flexDirection: "column",
+    justifyContent: "flex-start",
     backgroundColor: BG,
-    alignItems: "center",
-    paddingTop: Platform.select({ ios: 8, android: 8, web: 24 }),
+    paddingTop: Platform.select({ ios: 12, android: 12, web: 24 }),
   },
+
   content: {
-    alignItems: "stretch",
-    gap: 12,
+    // ensure children are centered horizontally inside the content area
+    alignContent: "center",
+    alignItems: "center",
     paddingBottom: 24,
   },
+
+  // Fixed-width wrapper for the centered column
+  wrap: {
+    width: "90%",
+    alignSelf: "center",
+    gap: 12,
+  },
+
   header: {
     alignSelf: "center",
-    fontSize: 18,
     fontWeight: "700",
+    fontSize: 18,
     color: TEXT,
     marginBottom: 6,
   },
+
   sectionTitle: {
     fontSize: 22,
     fontWeight: "800",
@@ -300,18 +392,28 @@ const styles = StyleSheet.create({
   half: {
     flexBasis: "48%",
   },
+
   third: {
-    flexBasis: (WRAP_W - 24) / 3,
+    width: "30%",
+    flexBasis: "40%",
     flexGrow: 0,
   },
+
+  // Increased horizontal size for the main button.
+  // Using WRAP_W here makes the style adapt to the same base width used elsewhere;
+  // adjust the multiplier to make it wider as needed.
   btn: {
     backgroundColor: MAROON,
     paddingVertical: 16,
-    borderRadius: 999,
+    borderRadius: 100,
     alignItems: "center",
     marginTop: 8,
+    width: WRAP_W * 1.5, // increased width (50% larger)
+    alignSelf: "center",
+    maxWidth: "100%",
   },
   btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+
   terms: {
     color: SUBTEXT,
     textAlign: "center",

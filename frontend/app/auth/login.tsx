@@ -1,4 +1,5 @@
 // app/auth/login.tsx
+import React from "react";
 import {
   SafeAreaView,
   View,
@@ -10,6 +11,17 @@ import {
   Platform,
 } from "react-native";
 import { router } from "expo-router";
+import Constants from "expo-constants";
+
+// GOOGLE_OAUTH: temporarily disabled. The imports below are commented out
+// so the rest of the app can be worked on without OAuth configured.
+// When you are ready to re-enable Google OAuth, uncomment these lines
+// and remove the placeholders in this file marked with `GOOGLE_OAUTH`.
+// import axios from "axios";
+// import * as WebBrowser from "expo-web-browser";
+// import * as Google from "expo-auth-session/providers/google";
+// import * as SecureStore from "expo-secure-store";
+// import { makeRedirectUri } from "expo-auth-session";
 
 const MAROON = "#A2172C";
 const BG = "#FFF7F7";
@@ -19,85 +31,55 @@ const { width: W } = Dimensions.get("window");
 const WRAP_W = Math.min(420, W * 0.92);
 const CARD_W = WRAP_W;
 const CARD_H = CARD_W * 0.86;
-const LOGO_SIZE = Math.min(CARD_W * 0.60, 260);
+const LOGO_SIZE = Math.min(CARD_W * 0.6, 260);
 
 // ===========================================================
-// 🔒 BACKEND + GOOGLE OAUTH (COMMENTED OUT FOR NOW)
+// 🔒 BACKEND + GOOGLE OAUTH
 // ===========================================================
-/**
- * When backend is ready:
- * 1) Install deps:
- *    - expo install expo-auth-session
- *    - npm i axios
- *    - (optional) expo install expo-secure-store
- *
- * 2) Uncomment ALL of the imports + code in this section.
- * 3) Fill in the Google client IDs and your backend URL.
- * 4) Remove the mock `router.replace(...)` line in onPress below.
- */
+// This implementation uses expo-auth-session to get a Google ID token,
+// then sends it to the backend at POST /auth/google. The backend will
+// verify the token with Google and either return a JWT for existing users
+// or a profile blob for new users (so the frontend can navigate to create-account).
+//
+// To make this work:
+// 1) Create OAuth client IDs in Google Cloud (Web, iOS, Android) and set them
+//    in your `app.json` extras as EXPO_PUBLIC_GOOGLE_IOS_ID, EXPO_PUBLIC_GOOGLE_ANDROID_ID, EXPO_PUBLIC_GOOGLE_WEB_ID
+// 2) Make sure your backend has POST /auth/google (this project includes one)
+// 3) Optionally set BACKEND_BASE_URL in app.json extras, default is http://localhost:3000
 
-// import axios from "axios";
-// import * as WebBrowser from "expo-web-browser";
-// import * as Google from "expo-auth-session/providers/google";
-// import * as SecureStore from "expo-secure-store";
-
+// GOOGLE_OAUTH disabled: skip WebBrowser auth completion and client-id loading.
+// When re-enabling, uncomment the WebBrowser.maybeCompleteAuthSession() call
+// and the client ID extraction.
 // WebBrowser.maybeCompleteAuthSession();
 
-// const BACKEND_BASE_URL = "http://localhost:3000"; // <— change to your server
-// const IOS_CLIENT_ID = "<YOUR_IOS_CLIENT_ID>";
-// const ANDROID_CLIENT_ID = "<YOUR_ANDROID_CLIENT_ID>";
-// const WEB_CLIENT_ID = "<YOUR_WEB_CLIENT_ID>";
+const extra = (Constants.expoConfig && Constants.expoConfig.extra) || {};
+const BACKEND_BASE_URL = extra.BACKEND_BASE_URL || "http://localhost:3000";
+const IOS_CLIENT_ID = extra.EXPO_PUBLIC_GOOGLE_IOS_ID || "";
+const ANDROID_CLIENT_ID = extra.EXPO_PUBLIC_GOOGLE_ANDROID_ID || "";
+const WEB_CLIENT_ID = extra.EXPO_PUBLIC_GOOGLE_WEB_ID || "";
 
-// type BackendAuthResponse = {
-//   token: string;  // your app JWT/session token
-//   user: { id: string; email: string; name?: string };
-// };
+type BackendAuthResponse = {
+  token?: string; // your app JWT/session token
+  user?: { id: string; email: string; name?: string };
+  newUser?: boolean;
+  profile?: { email?: string; firstName?: string; lastName?: string };
+  needsProfile?: boolean;
+};
 
-// export default function GoogleLogin() {
-//   // Hook creates a request and gives you a prompt function + response
-//   const [request, response, promptAsync] = Google.useAuthRequest({
-//     iosClientId: IOS_CLIENT_ID,
-//     androidClientId: ANDROID_CLIENT_ID,
-//     webClientId: WEB_CLIENT_ID,
-//     responseType: "id_token", // we want an ID token from Google
-//   });
-
-//   React.useEffect(() => {
-//     (async () => {
-//       if (response?.type === "success") {
-//         const idToken = response.authentication?.idToken;
-//         if (!idToken) return;
-//         // Send Google ID token to your backend to verify/login
-//         const { data } = await axios.post<BackendAuthResponse>(
-//           `${BACKEND_BASE_URL}/auth/google`,
-//           { idToken }
-//         );
-//         // Save your session token (optional but recommended)
-//         await SecureStore.setItemAsync("token", data.token);
-//         // Navigate into the app
-//         router.replace("/(tabs)");
-//       }
-//     })();
-//   }, [response]);
-
-//   const onPress = async () => {
-//     // Opens Google sheet (web-view) for the user to sign in
-//     await promptAsync();
-//   };
-
-//   // ---- UI below remains exactly the same ----
-//   return ( ...same UI as below... );
-// }
-
-// ===========================================================
-// MOCK / CURRENT VERSION — navigates to next screen immediately
-// ===========================================================
 export default function GoogleLogin() {
+  // GOOGLE_OAUTH: Temporarily disabled.
+  // The original implementation used expo-auth-session to obtain an id_token
+  // then posted it to the backend. That logic is commented out so you can
+  // work on the rest of the app without an OAuth configuration in place.
+
+  // Simple placeholder flow: jump to create-account so devs can continue.
   const onPress = async () => {
-    // 🧪 MOCK: skip OAuth for now — go straight to next screen
+    console.warn(
+      "Google OAuth is temporarily disabled (placeholder). Redirecting to create-account."
+    );
     router.replace("/auth/create-account");
   };
-
+  // Render UI (same as the mock UI)
   return (
     <SafeAreaView style={styles.screen}>
       <View style={[styles.wrap, { width: WRAP_W }]}>
@@ -106,7 +88,7 @@ export default function GoogleLogin() {
         <View style={[styles.logoCard, { width: CARD_W, height: CARD_H }]}>
           <Image
             source={require("../../assets/images/logo.png")}
-            style={{ width: LOGO_SIZE, height: LOGO_SIZE }}
+            style={{ width: 2 * LOGO_SIZE, height: 2 * LOGO_SIZE }}
             resizeMode="contain"
           />
         </View>
@@ -129,6 +111,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: BG,
     alignItems: "center",
+    paddingHorizontal: 16,
     paddingTop: Platform.select({ ios: 12, android: 12, web: 24 }),
   },
   wrap: {
@@ -143,14 +126,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   logoCard: {
-    backgroundColor: "#fff",
     borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
   btn: {

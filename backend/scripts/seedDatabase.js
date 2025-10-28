@@ -78,6 +78,21 @@ const seedData = async () => {
       }
     ]);
 
+    // Example user with optional fields omitted (no email, no lastName)
+    const optionalUser = await User.create({
+      username: 'alex_optional',
+      password: 'password123',
+      firstName: 'Alex',
+      // lastName omitted intentionally to show it's optional
+      major: 'Undeclared',
+      birthDate: new Date('2003-07-01'),
+      year: 'Freshman',
+      bio: 'Optional fields demo user',
+      interests: ['Clubs']
+    });
+
+    users.push(optionalUser);
+
     console.log('Created sample users');
 
     // Create sample groups

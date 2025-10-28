@@ -12,8 +12,9 @@ const userSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    required: [true, 'Email is required'],
+    required: false,
     unique: true,
+    sparse: true,
     trim: true,
     lowercase: true,
     match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
@@ -85,9 +86,9 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index for better query performance
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
+// Index for better query performance and uniqueness
+userSchema.index({ email: 1 }, { unique: true, sparse: true });
+userSchema.index({ username: 1 }, { unique: true });
 
 // Virtual field to get user age
 userSchema.virtual("age").get(function () {

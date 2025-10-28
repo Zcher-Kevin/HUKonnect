@@ -36,7 +36,10 @@ router.get('/profile', auth, async (req, res) => {
 // Update user profile
 router.put('/profile', auth, async (req, res) => {
   try {
-    const allowedUpdates = ['firstName', 'lastName', 'major', 'year', 'bio', 'interests'];
+  // Allow these profile fields to be updated from the mobile client.
+  // Expanded to include minor, dob, gender and termsAccepted which the
+  // frontend may send from the Create Account screen.
+  const allowedUpdates = ['firstName', 'lastName', 'major', 'minor', 'year', 'dob', 'gender', 'bio', 'interests', 'termsAccepted'];
     const updates = {};
 
     // Only include allowed fields
@@ -45,6 +48,15 @@ router.put('/profile', auth, async (req, res) => {
         updates[key] = req.body[key];
       }
     });
+
+    // Map `dob` (frontend) to the `birthDate` field in the model.
+    if (updates.dob) {
+      const parsed = new Date(updates.dob);
+      if (!isNaN(parsed.getTime())) {
+        updates.birthDate = parsed;
+      }
+      delete updates.dob;
+    }
 
     const user = await User.findByIdAndUpdate(
       req.userId,
