@@ -4,11 +4,14 @@ import { Stack } from "expo-router";
 export default function RootLayout() {
   return (
     <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="user/[id]" />   {/* Profile detail (no bottom bar) */}
       <Stack.Screen name="index" />          {/* Welcome */}
       <Stack.Screen name="auth/login" />     {/* Google login */}
       <Stack.Screen name="auth/create-account" /> {/* Create account */}
       <Stack.Screen name="(tabs)" />         {/* existing app tabs */}
       <Stack.Screen name="+not-found" />
+      <Stack.Screen name="messages/[id]" /> {/* DM chat */}
+      <Stack.Screen name="user/[id]/schedule" />   {/* Profile → View Full Schedule */}
     </Stack>
   );
 }
