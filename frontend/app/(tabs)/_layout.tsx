@@ -1,10 +1,10 @@
+// app/(tabs)/_layout.tsx
 import { Tabs } from "expo-router";
 import React from "react";
 import { Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 const MAROON = "#A2172C";
-const TEXT = "#231F20";
 
 export default function TabLayout() {
   return (
@@ -21,7 +21,6 @@ export default function TabLayout() {
         tabBarLabelStyle: { fontWeight: "700" },
       }}
     >
-      {/* Home (your schedule) — visible but disabled for now */}
       <Tabs.Screen
         name="index"
         options={{
@@ -30,39 +29,41 @@ export default function TabLayout() {
             <Ionicons name="calendar-outline" size={size} color={color} />
           ),
         }}
-        listeners={{
-          tabPress: (e) => {
-            // keep it “no-op” for now
-            e.preventDefault();
-          },
-        }}
       />
 
-      {/* Events — placeholder, disabled */}
+      {/* Events → People directory */}
       <Tabs.Screen
         name="events"
         options={{
-          title: "Events",
+          title: "People",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="sparkles-outline" size={size} color={color} />
+            <Ionicons name="people-outline" size={size} color={color} />
           ),
         }}
-        listeners={{ tabPress: (e) => e.preventDefault() }}
       />
 
-      {/* Groups/Clubs — placeholder, disabled */}
+      {/* Keep Groups disabled for now */}
       <Tabs.Screen
         name="groups"
         options={{
           title: "Groups",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
+            <Ionicons name="chatbubbles-outline" size={size} color={color} />
           ),
         }}
         listeners={{ tabPress: (e) => e.preventDefault() }}
       />
 
-      {/* Settings — the only one that navigates */}
+      <Tabs.Screen
+        name="messages"
+        options={{
+          title: "Messages",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubble-ellipses-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
       <Tabs.Screen
         name="settings"
         options={{
@@ -75,4 +76,3 @@ export default function TabLayout() {
     </Tabs>
   );
 }
-
