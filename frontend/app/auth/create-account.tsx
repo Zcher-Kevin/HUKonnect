@@ -28,6 +28,10 @@ import { router, useLocalSearchParams } from "expo-router";
 import axios from "axios";
 import * as SecureStore from "expo-secure-store";
 const API_BASE = "http://localhost:3000"; // <— change to your server
+// Developer convenience: when true, clicking Create Account will skip
+// real network registration and immediately let you into the app.
+// WARNING: For production builds this MUST be false.
+const DEV_QUICK_REGISTER = true;
 
 const MAROON = "#A2172C";
 const BG = "#FFF7F7";
@@ -83,56 +87,76 @@ export default function CreateAccount() {
    *  - return the canonical user object (optional)
    */
   const submitProfile = async () => {
-    // --- Client-side minimal checks (server will re-validate) ---
-    if (!first.trim() || !last.trim()) {
-      throw new Error("Please enter your first and last name.");
+    // Dev shortcut: immediately return a fake user and token so testers can
+    // enter the app without the backend. This is intentionally simple and
+    // should be disabled before production.
+    if (DEV_QUICK_REGISTER) {
+      const devToken = `dev-token-${Date.now()}`;
+      try {
+        await SecureStore.setItemAsync("token", devToken);
+      } catch (e) {
+        // ignore SecureStore errors during quick dev flow
+      }
+      return { user: { id: "dev", firstName: first.trim() || "Dev User" } };
     }
-    if (day.length !== 2 || month.length !== 2 || year.length !== 4) {
-      throw new Error("Please enter a valid date (DD/MM/YYYY).");
+    // NOTE: Relaxed validation to allow quick-start registration with no input.
+    // If the user leaves fields blank we will auto-generate a minimal account
+    // (username + random password) so they can enter the app immediately.
+    // DOB is optional — only build it when all three parts are provided.
+    let dob: string | undefined = undefined;
+    if (day || month || year) {
+      // Only require a full date if any part was provided
+      if (day.length !== 2 || month.length !== 2 || year.length !== 4) {
+        throw new Error(
+          "Please enter a valid date (DD/MM/YYYY) or leave it blank."
+        );
+      }
+      dob = buildDob();
     }
-
-    const dob = buildDob();
 
     // Retrieve your JWT created during Google sign-in (if you saved one)
-    let token = await SecureStore.getItemAsync("token");
+    let token = (await SecureStore.getItemAsync("token")) as string | null;
 
-    // If there's no token, attempt to auto-register the user if we have
-    // an email from the login flow (e.g., Google). This lets users who
-    // signed in via Google proceed to fill their profile without a
-    // separate registration step. If no email is available, throw an error
-    // and require the user to sign in first.
+    // If there's no token, attempt to auto-register the user using any
+    // email supplied by the login flow (e.g., Google). If no email is
+    // available we still create a minimal local account using generated
+    // username + random password so the user can get inside the app.
     if (!token) {
       try {
-        const p = params.profile ? JSON.parse(params.profile as string) : null;
-        const email = p?.email;
-        if (!email) {
-          throw new Error(
-            "No authenticated session found — please sign in first."
-          );
-        }
+        const p = params.profile
+          ? JSON.parse(params.profile as any as string)
+          : null;
+        const email = p?.email as string | undefined;
 
         // create a sensible username and random password for the local account
-        const localPart = email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "");
-        const usernameCandidate = `${localPart}-${Date.now()
+        const localBase = email
+          ? email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "")
+          : "user";
+        const usernameCandidate = `${localBase}-${Date.now()
           .toString()
           .slice(-4)}`;
         const randomPassword = Math.random().toString(36).slice(2, 12);
+
+        // Ensure we provide at least a firstName to satisfy the server; if
+        // user didn't enter one we auto-generate a friendly name.
+        const safeFirst =
+          first.trim() || `User${Date.now().toString().slice(-4)}`;
 
         const registerRes = await axios.post(
           `${API_BASE}/api/auth/register`,
           {
             username: usernameCandidate,
-            email,
+            ...(email ? { email } : {}),
             password: randomPassword,
-            firstName: first.trim(),
-            lastName: last.trim(),
+            firstName: safeFirst,
+            ...(last.trim() ? { lastName: last.trim() } : {}),
           },
           { timeout: 15000 }
         );
 
         token = registerRes.data?.token;
         if (token) {
-          await SecureStore.setItemAsync("token", token);
+          await SecureStore.setItemAsync("token", token as string);
         }
       } catch (regErr: any) {
         // bubble a helpful error to the UI
@@ -144,22 +168,21 @@ export default function CreateAccount() {
       }
     }
 
-    const res = await axios.put(
-      `${API_BASE}/api/users/me/profile`,
-      {
-        firstName: first.trim(),
-        lastName: last.trim(),
-        major: major.trim() || null,
-        minor: minor.trim() || null,
-        dob, // YYYY-MM-DD
-        gender: gender.trim() || null,
-        termsAccepted: true,
-      },
-      {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        timeout: 15000,
-      }
-    );
+    // Build the payload only with fields the user actually provided so we
+    // don't overwrite generated values (e.g., auto-generated firstName).
+    const payload: any = {};
+    if (first.trim()) payload.firstName = first.trim();
+    if (last.trim()) payload.lastName = last.trim();
+    if (major.trim()) payload.major = major.trim();
+    if (minor.trim()) payload.minor = minor.trim();
+    if (dob) payload.dob = dob;
+    if (gender.trim()) payload.gender = gender.trim();
+    payload.termsAccepted = true;
+
+    const res = await axios.put(`${API_BASE}/api/users/me/profile`, payload, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      timeout: 15000,
+    });
 
     return res.data; // expected { user: {...} } (shape up to your backend)
   };
@@ -341,8 +364,8 @@ const styles = StyleSheet.create({
     paddingTop: Platform.select({ ios: 12, android: 12, web: 24 }),
   },
 
+  // ensure children are centered horizontally inside the content area
   content: {
-    // ensure children are centered horizontally inside the content area
     alignContent: "center",
     alignItems: "center",
     paddingBottom: 24,

@@ -16,11 +16,13 @@ type Person = {
   avatar: string; // local asset later; for now use a placeholder URL
 };
 
+// Testing example of user
 const MOCK = [
   { id: "charlotte", name: "Charlotte Chan", major: "Computer Science", bio: "...", avatar: "https://i.pravatar.cc/200?img=5" },
   { id: "sam",       name: "Sam Patel",       major: "Physics",           bio: "...", avatar: "https://i.pravatar.cc/200?img=11" },
   { id: "muller",    name: "Lena Muller",     major: "Chemistry",         bio: "...", avatar: "https://i.pravatar.cc/200?img=32" },
 ];
+
 
 export default function PeopleDirectory() {
   const [q, setQ] = useState("");
@@ -68,8 +70,19 @@ export default function PeopleDirectory() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: BG, padding: 16, gap: 12 },
-  title: { fontSize: 20, fontWeight: "800", color: TEXT },
+  screen: {
+    flex: 1,
+    backgroundColor: BG,
+    padding: 16,
+    gap: 12
+  },
+  
+  title: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: TEXT
+  },
+
   search: {
     backgroundColor: "#F5EAEA",
     borderRadius: 14,

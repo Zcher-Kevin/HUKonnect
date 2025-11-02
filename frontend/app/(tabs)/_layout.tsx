@@ -41,8 +41,7 @@ export default function TabLayout() {
           ),
         }}
       />
-
-      {/* Keep Groups disabled for now */}
+      {/**
       <Tabs.Screen
         name="groups"
         options={{
@@ -53,7 +52,7 @@ export default function TabLayout() {
         }}
         listeners={{ tabPress: (e) => e.preventDefault() }}
       />
-
+      */}
       <Tabs.Screen
         name="messages"
         options={{
