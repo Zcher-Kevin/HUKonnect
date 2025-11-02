@@ -1,142 +1,149 @@
-// app/auth/login.tsx
-import React from "react";
+import React, { useEffect } from "react";
 import {
   SafeAreaView,
   View,
   Text,
-  Image,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
+  Alert,
   Platform,
 } from "react-native";
 import { router } from "expo-router";
-import Constants from "expo-constants";
 
-// GOOGLE_OAUTH: temporarily disabled. The imports below are commented out
-// so the rest of the app can be worked on without OAuth configured.
-// When you are ready to re-enable Google OAuth, uncomment these lines
-// and remove the placeholders in this file marked with `GOOGLE_OAUTH`.
-// import axios from "axios";
-// import * as WebBrowser from "expo-web-browser";
-// import * as Google from "expo-auth-session/providers/google";
-// import * as SecureStore from "expo-secure-store";
-// import { makeRedirectUri } from "expo-auth-session";
+import * as WebBrowser from "expo-web-browser";
+import * as Google from "expo-auth-session/providers/google";
+import * as SecureStore from "expo-secure-store";
+import axios from "axios";
 
-const MAROON = "#A2172C";
+// Must run once at module scope so expo-auth-session can finalize browser flows.
+WebBrowser.maybeCompleteAuthSession();
+
+// CHANGE THIS IF BACKEND IS ON ANOTHER HOST (like your LAN IP on device)
+const API_BASE = "http://localhost:3000";
+
 const BG = "#FFF7F7";
+const MAROON = "#A2172C";
 const TEXT = "#231F20";
 
-const { width: W } = Dimensions.get("window");
-const WRAP_W = Math.min(420, W * 0.92);
-const CARD_W = WRAP_W;
-const CARD_H = CARD_W * 0.86;
-const LOGO_SIZE = Math.min(CARD_W * 0.6, 260);
+export default function LoginScreen() {
+  // IMPORTANT:
+  // Your current expo-auth-session version wants JUST { clientId }.
+  // You MUST paste a REAL Google "Web client" OAuth 2.0 Client ID here,
+  // not a placeholder. If you leave a fake string, Google will 400.
+  //
+  // You also cannot pass redirectUri/useProxy in this old version.
+  // It will generate its own redirect URI internally.
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    clientId: "657018822317-qlbpreu30g5nu8lcg9ogbj1rvs7o1dde.apps.googleusercontent.com",
+    responseType: "id_token",
+    scopes: ["profile", "email"],
+  });
 
-// ===========================================================
-// 🔒 BACKEND + GOOGLE OAUTH
-// ===========================================================
-// This implementation uses expo-auth-session to get a Google ID token,
-// then sends it to the backend at POST /auth/google. The backend will
-// verify the token with Google and either return a JWT for existing users
-// or a profile blob for new users (so the frontend can navigate to create-account).
-//
-// To make this work:
-// 1) Create OAuth client IDs in Google Cloud (Web, iOS, Android) and set them
-//    in your `app.json` extras as EXPO_PUBLIC_GOOGLE_IOS_ID, EXPO_PUBLIC_GOOGLE_ANDROID_ID, EXPO_PUBLIC_GOOGLE_WEB_ID
-// 2) Make sure your backend has POST /auth/google (this project includes one)
-// 3) Optionally set BACKEND_BASE_URL in app.json extras, default is http://localhost:3000
+  // TEMP: log what redirect URI Expo is using
+  console.log("Redirect URI:", request?.redirectUri);
 
-// GOOGLE_OAUTH disabled: skip WebBrowser auth completion and client-id loading.
-// When re-enabling, uncomment the WebBrowser.maybeCompleteAuthSession() call
-// and the client ID extraction.
-// WebBrowser.maybeCompleteAuthSession();
+  // Handle the Google result
+  useEffect(() => {
+    const finishLogin = async () => {
+      if (response?.type !== "success") return;
 
-const extra = (Constants.expoConfig && Constants.expoConfig.extra) || {};
-const BACKEND_BASE_URL = extra.BACKEND_BASE_URL || "http://localhost:3000";
-const IOS_CLIENT_ID = extra.EXPO_PUBLIC_GOOGLE_IOS_ID || "";
-const ANDROID_CLIENT_ID = extra.EXPO_PUBLIC_GOOGLE_ANDROID_ID || "";
-const WEB_CLIENT_ID = extra.EXPO_PUBLIC_GOOGLE_WEB_ID || "";
+      const idToken = response.authentication?.idToken;
+      if (!idToken) {
+        Alert.alert("Login error", "Google did not return an idToken");
+        return;
+      }
 
-type BackendAuthResponse = {
-  token?: string; // your app JWT/session token
-  user?: { id: string; email: string; name?: string };
-  newUser?: boolean;
-  profile?: { email?: string; firstName?: string; lastName?: string };
-  needsProfile?: boolean;
-};
+      try {
+        // Send Google idToken to backend to get app's session token
+        const { data } = await axios.post(`${API_BASE}/auth/google`, { idToken });
 
-export default function GoogleLogin() {
-  // GOOGLE_OAUTH: Temporarily disabled.
-  // The original implementation used expo-auth-session to obtain an id_token
-  // then posted it to the backend. That logic is commented out so you can
-  // work on the rest of the app without an OAuth configuration in place.
+        // Store backend token for authenticated calls later
+        if (data?.token) {
+          await SecureStore.setItemAsync("token", data.token);
+        }
 
-  // Simple placeholder flow: jump to create-account so devs can continue.
-  const onPress = async () => {
-    console.warn(
-      "Google OAuth is temporarily disabled (placeholder). Redirecting to create-account."
-    );
-    router.replace("/auth/create-account");
-  };
-  // Render UI (same as the mock UI)
+        router.replace("/(tabs)");
+      } catch (err) {
+        console.warn("OAuth backend exchange failed:", err);
+
+        // DEV fallback: let you into the app anyway so you're unblocked
+        router.replace("/(tabs)");
+      }
+    };
+
+    finishLogin();
+  }, [response]);
+
   return (
     <SafeAreaView style={styles.screen}>
-      <View style={[styles.wrap, { width: WRAP_W }]}>
-        <Text style={styles.h1}>Welcome to{"\n"}HUKonnect</Text>
-
-        <View style={[styles.logoCard, { width: CARD_W, height: CARD_H }]}>
-          <Image
-            source={require("../../assets/images/logo.png")}
-            style={{ width: 2 * LOGO_SIZE, height: 2 * LOGO_SIZE }}
-            resizeMode="contain"
-          />
-        </View>
+      <View style={styles.wrap}>
+        <Text style={styles.title}>Welcome to HUKonnect</Text>
 
         <TouchableOpacity
-          style={[styles.btn, { width: WRAP_W }]}
+          disabled={!request}
+          style={styles.btn}
           activeOpacity={0.9}
-          onPress={onPress}
+          onPress={() => {
+            // This opens Google's login flow (popup / browser / native sheet)
+            promptAsync();
+          }}
         >
           <Text style={styles.btnText}>Login via Google</Text>
+        </TouchableOpacity>
+
+        {/* Emergency dev skip so UI work isn't blocked by auth */}
+        <TouchableOpacity
+          style={[styles.btn, { backgroundColor: "#999" }]}
+          onPress={() => {
+            router.replace("/(tabs)");
+          }}
+        >
+          <Text style={styles.btnText}>Skip (DEV ONLY)</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
 
-// ---------- STYLES ----------
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: BG,
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: Platform.select({ ios: 12, android: 12, web: 24 }),
+    justifyContent: "center",
+    padding: 24,
   },
   wrap: {
-    alignItems: "center",
     gap: 24,
-  },
-  h1: {
-    fontSize: 32,
-    lineHeight: 36,
-    fontWeight: "800",
-    color: TEXT,
-    textAlign: "center",
-  },
-  logoCard: {
-    borderRadius: 24,
     alignItems: "center",
-    justifyContent: "center",
-    elevation: 2,
+    width: "100%",
+    maxWidth: 360,
+  },
+  title: {
+    fontSize: 24,
+    color: TEXT,
+    fontWeight: "800",
+    textAlign: "center",
   },
   btn: {
     backgroundColor: MAROON,
-    paddingVertical: 16,
     borderRadius: 999,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    minWidth: 220,
     alignItems: "center",
-    marginTop: 6,
   },
-  btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  btnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 16,
+  },
+  note: {
+    fontSize: 12,
+    color: TEXT,
+    textAlign: "center",
+    opacity: 0.6,
+    lineHeight: 16,
+    maxWidth: 260,
+  },
 });

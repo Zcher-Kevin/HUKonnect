@@ -205,13 +205,46 @@ router.get('/verify', async (req, res) => {
   }
 });
 
-// Google OAuth token exchange (temporarily disabled)
-// The original implementation verified Google's id_token, created/returned a
-// local JWT and optionally created a minimal user. That logic is currently
-// commented out so that the project can be worked on without a Google OAuth
-// configuration. Re-enable when you're ready to accept id_tokens again.
+// TEMP dev version of Google auth.
+// IMPORTANT: This does NOT verify the token with Google.
+// Backend MUST replace this with real verification and JWT signing.
 router.post('/google', async (req, res) => {
-  return res.status(501).json({ success: false, message: 'Google auth is temporarily disabled on this server.' });
-});
+  try {
+    const { idToken } = req.body;
 
-module.exports = router;
+    // make sure frontend sent something
+    if (!idToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing idToken from Google",
+      });
+    }
+
+    // TODO (backend): verify idToken with Google, e.g.:
+    //   const googleUser = await verifyGoogleIdToken(idToken)
+    //   const user = await findOrCreateUser(googleUser)
+    //   const token = signJwt({ userId: user._id })
+    //
+    // For now we just fake a user token so the app can move forward
+
+    const fakeUser = {
+      _id: "temp-user-id",
+      name: "Temp User",
+      email: "temp@example.com",
+    };
+
+    const fakeJwt = "FAKE_JWT_FOR_NOW";
+
+    return res.json({
+      success: true,
+      token: fakeJwt,
+      user: fakeUser,
+    });
+  } catch (err) {
+    console.error("google auth temp error", err);
+    return res.status(500).json({
+      success: false,
+      message: "Google auth temp endpoint failed",
+    });
+  }
+});
