@@ -4,35 +4,33 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
   username: {
     type: String,
-    required: [true, 'Username is required'],
+    required: true, // optional for OAuth users; registration route enforces when needed
     unique: true,
+    sparse: true,
     trim: true,
     minlength: [3, 'Username must be at least 3 characters long'],
     maxlength: [30, 'Username cannot exceed 30 characters']
   },
-  email: {
+  // Google OAuth fields
+  googleId: {
     type: String,
-    required: false,
     unique: true,
-    sparse: true,
-    trim: true,
-    lowercase: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
+    sparse: true
   },
-  password: {
+  authProvider: {
     type: String,
-    required: [true, 'Password is required'],
-    minlength: [6, 'Password must be at least 6 characters long']
+    enum: ['local', 'google'],
+    default: 'local'
   },
   firstName: {
     type: String,
-    required: [true, 'First name is required'],
+    required: false, // optional for OAuth users
     trim: true,
     maxlength: [50, 'First name cannot exceed 50 characters']
   },
   lastName: {
     type: String,
-    required: [true, 'Last name is required'],
+    required: false, // optional for OAuth users
     trim: true,
     maxlength: [50, 'Last name cannot exceed 50 characters']
   },
@@ -88,7 +86,7 @@ const userSchema = new mongoose.Schema({
 
 // Index for better query performance and uniqueness
 userSchema.index({ email: 1 }, { unique: true, sparse: true });
-userSchema.index({ username: 1 }, { unique: true });
+userSchema.index({ username: 1 }, { unique: true, sparse: true });
 
 // Virtual field to get user age
 userSchema.virtual("age").get(function () {
@@ -109,10 +107,12 @@ userSchema.virtual("age").get(function () {
 });
 userSchema.set("toJSON", { virtuals: true });
 
-// Hash password before saving
+// Hash password before saving (only for local auth)
 userSchema.pre('save', async function(next) {
-  // Only hash the password if it has been modified (or is new)
-  if (!this.isModified('password')) return next();
+  // Only hash the password if it has been modified AND it's a local auth user
+  if (!this.isModified('password') || this.authProvider !== 'local' || !this.password) {
+    return next();
+  }
   
   try {
     // Hash password with cost of 12

@@ -1,10 +1,13 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
+const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
 
-const axios = require('axios');
 const router = express.Router();
+
+// Initialize Google OAuth client
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Register new user
 router.post('/register', [
@@ -12,14 +15,6 @@ router.post('/register', [
     .trim()
     .isLength({ min: 3, max: 30 })
     .withMessage('Username must be between 3 and 30 characters'),
-  body('email')
-    .optional({ checkFalsy: true })
-    .isEmail()
-    .normalizeEmail()
-    .withMessage('Please provide a valid email'),
-  body('password')
-    .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long'),
   body('firstName')
     .trim()
     .notEmpty()
@@ -33,6 +28,7 @@ router.post('/register', [
     .optional({ checkFalsy: true })
     .withMessage('Nickname is optional')
 ], async (req, res) => {
+  
   try {
     // Check for validation errors
     const errors = validationResult(req);
@@ -44,7 +40,7 @@ router.post('/register', [
       });
     }
 
-    const { username, email, password, firstName, lastName, major, year, bio } = req.body;
+    const { username, firstName, lastName, major, year, bio } = req.body;
 
     // Check if user already exists. If email is provided, check both email and username;
     // otherwise check username only.
@@ -65,13 +61,12 @@ router.post('/register', [
     // Create new user
     const user = new User({
       username,
-      email,
-      password,
       firstName,
       lastName,
       major,
       year,
-      bio
+      bio,
+      authProvider: 'local' // Explicitly set as local auth
     });
 
     await user.save();
@@ -205,46 +200,93 @@ router.get('/verify', async (req, res) => {
   }
 });
 
-// TEMP dev version of Google auth.
-// IMPORTANT: This does NOT verify the token with Google.
-// Backend MUST replace this with real verification and JWT signing.
+// Google OAuth token exchange
 router.post('/google', async (req, res) => {
   try {
     const { idToken } = req.body;
 
-    // make sure frontend sent something
     if (!idToken) {
       return res.status(400).json({
         success: false,
-        message: "Missing idToken from Google",
+        message: 'Google ID token is required'
       });
     }
 
-    // TODO (backend): verify idToken with Google, e.g.:
-    //   const googleUser = await verifyGoogleIdToken(idToken)
-    //   const user = await findOrCreateUser(googleUser)
-    //   const token = signJwt({ userId: user._id })
-    //
-    // For now we just fake a user token so the app can move forward
-
-    const fakeUser = {
-      _id: "temp-user-id",
-      name: "Temp User",
-      email: "temp@example.com",
-    };
-
-    const fakeJwt = "FAKE_JWT_FOR_NOW";
-
-    return res.json({
-      success: true,
-      token: fakeJwt,
-      user: fakeUser,
+    // Verify the Google ID token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: idToken,
+      audience: process.env.GOOGLE_CLIENT_ID
     });
-  } catch (err) {
-    console.error("google auth temp error", err);
-    return res.status(500).json({
+
+    const payload = ticket.getPayload();
+    const { sub: googleId, email, given_name: firstName, family_name: lastName, picture: profilePicture, email_verified } = payload;
+
+    // Find existing user by googleId OR by email (so we can link accounts)
+    let user = await User.findOne({
+      $or: [ { googleId: googleId }, { email: email } ]
+    });
+
+    let needsProfile = false;
+
+    if (user) {
+      // Link Google account to existing user (if not already linked)
+      let changed = false;
+      if (!user.googleId) {
+        user.googleId = googleId;
+        changed = true;
+      }
+      // Mark that Google is an auth method for this account
+      if (user.authProvider !== 'google') {
+        user.authProvider = 'google';
+        changed = true;
+      }
+      if (!user.isActive) {
+        user.isActive = true;
+        changed = true;
+      }
+
+      // If required profile fields are missing, flag as needsProfile so frontend can route user
+      if (!user.username || !user.firstName || !user.lastName) needsProfile = true;
+
+      user.lastLogin = new Date();
+      if (changed) await user.save();
+      else await user.save();
+    } else {
+      // Create minimal user record for Google sign-in. Other profile fields
+      // (username, names, etc.) will be collected later via the create-account flow.
+      user = new User({
+        email,
+        googleId,
+        authProvider: 'google',
+        isActive: true,
+      });
+      await user.save();
+      needsProfile = true;
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET || 'fallback-secret',
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+
+    // Respond with token and user info
+    res.json({
+      success: true,
+      message: 'Google authentication successful',
+      token,
+      user: user.toPublicJSON(),
+      needsProfile
+    });
+
+  // error handling
+  } catch (error) {
+    console.error('Google auth error:', error);
+    res.status(500).json({
       success: false,
-      message: "Google auth temp endpoint failed",
+      message: 'Google authentication failed',
+      error: error.message
     });
   }
 });
