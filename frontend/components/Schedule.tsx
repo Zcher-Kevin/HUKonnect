@@ -14,7 +14,6 @@ import {
   Pressable,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as SecureStore from "expo-secure-store";
 
 const MAROON = "#A2172C";
 const TEXT = "#231F20";
@@ -157,7 +156,20 @@ export default function ScheduleScreen() {
     let mounted = true;
     (async () => {
       try {
-        const token = (await SecureStore.getItemAsync("token")) || undefined;
+        // Try to get token from our storage wrapper if available; fall back to
+        // no-token behavior when storage isn't ready to avoid crashing on
+        // clients that don't expose native modules yet.
+        let token: string | undefined = undefined;
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const storage = require("../app/lib/storage");
+          if (storage && storage.getItem) {
+            token = (await storage.getItem("token")) || undefined;
+          }
+        } catch (e) {
+          // storage not available yet; ignore and continue with default key
+        }
+
         const key = token
           ? `${STORAGE_KEY_BASE}:${token.slice(-8)}`
           : STORAGE_KEY_BASE;
@@ -488,7 +500,6 @@ export default function ScheduleScreen() {
 }
 
 const styles = StyleSheet.create({
-
   header: {
     paddingHorizontal: 16,
     paddingTop: Platform.select({ ios: 4, android: 8, web: 12 }),

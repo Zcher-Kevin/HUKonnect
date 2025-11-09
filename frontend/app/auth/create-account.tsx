@@ -26,8 +26,12 @@ import { router, useLocalSearchParams } from "expo-router";
  *      npm i axios
  */
 import axios from "axios";
-import * as SecureStore from "expo-secure-store";
-const API_BASE = "http://localhost:3000"; // <— change to your server
+import {
+  setItem as storageSetItem,
+  getItem as storageGetItem,
+} from "../lib/storage";
+import { isValidEmail } from "../lib/validators";
+import { API_BASE } from "../lib/config";
 // Developer convenience: when true, clicking Create Account will skip
 // real network registration and immediately let you into the app.
 // WARNING: For production builds this MUST be false.
@@ -56,6 +60,11 @@ export default function CreateAccount() {
   }, [params]);
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
+  // Local auth fields (optional). If provided we will register using these
+  // credentials instead of generating a random password.
+  const [emailInput, setEmailInput] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [nickname, setNickname] = useState("");
   const [major, setMajor] = useState("");
   const [minor, setMinor] = useState("");
@@ -93,7 +102,7 @@ export default function CreateAccount() {
     if (DEV_QUICK_REGISTER) {
       const devToken = `dev-token-${Date.now()}`;
       try {
-        await SecureStore.setItemAsync("token", devToken);
+        await storageSetItem("token", devToken);
       } catch (e) {
         // ignore SecureStore errors during quick dev flow
       }
@@ -115,50 +124,93 @@ export default function CreateAccount() {
     }
 
     // Retrieve your JWT created during Google sign-in (if you saved one)
-    let token = (await SecureStore.getItemAsync("token")) as string | null;
+    let token = (await storageGetItem("token")) as string | null;
 
-    // If there's no token, attempt to auto-register the user using any
-    // email supplied by the login flow (e.g., Google). If no email is
-    // available we still create a minimal local account using generated
-    // username + random password so the user can get inside the app.
+    // If there's no token, attempt to register the user. Priority:
+    // 1) If the user manually provided email+password on this screen, use that.
+    // 2) Else try to use the profile passed from an OAuth flow (params.profile).
+    // 3) Else fall back to auto-generated username + random password.
     if (!token) {
       try {
-        const p = params.profile
-          ? JSON.parse(params.profile as any as string)
-          : null;
-        const email = p?.email as string | undefined;
+        // If user manually entered an email/password, use those
+        if (emailInput.trim() || passwordInput) {
+          // Client-side validation: ensur          npx expo start --dev-client -c          rm -rf /Users/kevin/Desktop/HUKonnect/frontend/node_modulese provided email looks valid
+          if (emailInput && !isValidEmail(emailInput)) {
+            throw new Error("Please enter a valid email address.");
+          }
+          if (!emailInput.trim() || !passwordInput) {
+            throw new Error(
+              "Please provide both email and password to register."
+            );
+          }
+          if (passwordInput.length < 6) {
+            throw new Error("Password must be at least 6 characters long.");
+          }
+          if (passwordInput !== confirmPassword) {
+            throw new Error("Password and confirmation do not match.");
+          }
 
-        // create a sensible username and random password for the local account
-        const localBase = email
-          ? email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "")
-          : "user";
-        const usernameCandidate = `${localBase}-${Date.now()
-          .toString()
-          .slice(-4)}`;
-        const randomPassword = Math.random().toString(36).slice(2, 12);
+          const safeFirst =
+            first.trim() || `User${Date.now().toString().slice(-4)}`;
+          const registerRes = await axios.post(
+            `${API_BASE}/api/auth/register`,
+            {
+              email: emailInput.trim(),
+              password: passwordInput,
+              firstName: safeFirst,
+              ...(last.trim() ? { lastName: last.trim() } : {}),
+            },
+            { timeout: 15000 }
+          );
 
-        // Ensure we provide at least a firstName to satisfy the server; if
-        // user didn't enter one we auto-generate a friendly name.
-        const safeFirst =
-          first.trim() || `User${Date.now().toString().slice(-4)}`;
+          token = registerRes.data?.token;
+          if (token) {
+            await storageSetItem("token", token as string);
+          }
+        } else {
+          // No manual creds — try to use OAuth-provided profile or fallback to auto-generated
+          const p = params.profile
+            ? JSON.parse(params.profile as any as string)
+            : null;
+          const email = p?.email as string | undefined;
 
-        const registerRes = await axios.post(
-          `${API_BASE}/api/auth/register`,
-          {
-            username: usernameCandidate,
-            ...(email ? { email } : {}),
-            password: randomPassword,
-            firstName: safeFirst,
-            ...(last.trim() ? { lastName: last.trim() } : {}),
-          },
-          { timeout: 15000 }
-        );
+          // create a sensible username and random password for the local account
+          const localBase = email
+            ? email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "")
+            : "user";
+          const usernameCandidate = `${localBase}-${Date.now()
+            .toString()
+            .slice(-4)}`;
+          const randomPassword = Math.random().toString(36).slice(2, 12);
 
-        token = registerRes.data?.token;
-        if (token) {
-          await SecureStore.setItemAsync("token", token as string);
+          // Ensure we provide at least a firstName to satisfy the server; if
+          // user didn't enter one we auto-generate a friendly name.
+          const safeFirst =
+            first.trim() || `User${Date.now().toString().slice(-4)}`;
+
+          const registerRes = await axios.post(
+            `${API_BASE}/api/auth/register`,
+            {
+              username: usernameCandidate,
+              ...(email ? { email } : {}),
+              password: randomPassword,
+              firstName: safeFirst,
+              ...(last.trim() ? { lastName: last.trim() } : {}),
+            },
+            { timeout: 15000 }
+          );
+
+          token = registerRes.data?.token;
+          if (token) {
+            await storageSetItem("token", token as string);
+          }
         }
       } catch (regErr: any) {
+        // Log details for debugging (do not show raw tokens in UI)
+        console.error("Register error details:", {
+          message: regErr?.message,
+          response: regErr?.response?.data,
+        });
         // bubble a helpful error to the UI
         throw new Error(
           regErr?.response?.data?.message ||
@@ -223,6 +275,39 @@ export default function CreateAccount() {
       >
         <View style={styles.wrap}>
           <Text style={styles.header}>Create Account</Text>
+
+          <Text style={styles.sectionTitle}>Account</Text>
+
+          <TextInput
+            placeholder="Email (optional)"
+            placeholderTextColor={SUBTEXT}
+            style={styles.input}
+            value={emailInput}
+            onChangeText={setEmailInput}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            returnKeyType="next"
+          />
+
+          <TextInput
+            placeholder="Password (min 6 chars)"
+            placeholderTextColor={SUBTEXT}
+            style={styles.input}
+            value={passwordInput}
+            onChangeText={setPasswordInput}
+            secureTextEntry
+            returnKeyType="next"
+          />
+
+          <TextInput
+            placeholder="Confirm Password"
+            placeholderTextColor={SUBTEXT}
+            style={styles.input}
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+            returnKeyType="next"
+          />
 
           <Text style={styles.sectionTitle}>Your Information</Text>
 

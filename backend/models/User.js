@@ -4,12 +4,26 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
   username: {
     type: String,
-    required: true, // optional for OAuth users; registration route enforces when needed
+    // Required only for local auth users. OAuth users may not have a username
+    required: function() { return this.authProvider === 'local'; },
     unique: true,
     sparse: true,
     trim: true,
     minlength: [3, 'Username must be at least 3 characters long'],
     maxlength: [30, 'Username cannot exceed 30 characters']
+  },
+  // Email (optional for legacy accounts) - used for login and linking
+  email: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    unique: true,
+    sparse: true,
+  },
+  // Password hash (only used for local auth)
+  password: {
+    type: String,
+    required: false,
   },
   // Google OAuth fields
   googleId: {

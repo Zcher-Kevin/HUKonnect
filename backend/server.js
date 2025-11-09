@@ -20,9 +20,13 @@ const limiter = rateLimit({
 app.use(helmet()); // Security headers
 app.use(compression()); // Compression
 app.use(limiter); // Rate limiting
+// During development allow flexible origins so web (localhost), Expo and
+// other dev clients can reach the API. In production you should lock this
+// down to specific trusted origins.
+const isDev = process.env.NODE_ENV !== 'production';
 app.use(cors({
-  origin: ['http://localhost:8081', 'exp://192.168.1.1:8081'], // Expo development URLs
-  credentials: true
+  origin: isDev ? true : ['http://localhost:8081', 'exp://192.168.1.1:8081'],
+  credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));

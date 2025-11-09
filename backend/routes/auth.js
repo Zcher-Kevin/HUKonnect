@@ -1,99 +1,115 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
 
 const router = express.Router();
 
-// Initialize Google OAuth client
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+// Export router
+module.exports = router;
 
 // Register new user
-router.post('/register', [
-  body('username')
-    .trim()
-    .isLength({ min: 3, max: 30 })
-    .withMessage('Username must be between 3 and 30 characters'),
-  body('firstName')
-    .trim()
-    .notEmpty()
-    .withMessage('First name is required'),
-  body('lastName')
-    .trim()
-    .notEmpty()
-    .withMessage('Last name is required'),
-  body('nickname')
-    .trim()
-    .optional({ checkFalsy: true })
-    .withMessage('Nickname is optional')
-], async (req, res) => {
-  
-  try {
-    // Check for validation errors
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
+router.post(
+  '/register',
+  [
+    body('email')
+      .optional({ checkFalsy: true })
+      .isEmail()
+      .normalizeEmail()
+      .withMessage('Please provide a valid email'),
+    body('username')
+      .optional({ checkFalsy: true })
+      .trim()
+      .isLength({ min: 3, max: 30 })
+      .withMessage('Username must be between 3 and 30 characters'),
+    body('password')
+      .isLength({ min: 6 })
+      .withMessage('Password must be at least 6 characters'),
+    body('firstName').optional({ checkFalsy: true }).trim(),
+    body('lastName').optional({ checkFalsy: true }).trim(),
+  ],
+  async (req, res) => {
+    try {
+      // Check for validation errors
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: errors.array(),
+        });
+      }
+
+      let { username, email, password, firstName, lastName, major, year, bio } = req.body;
+
+      // Check if user already exists by email or username (if provided)
+      const orQuery = [];
+      if (email) orQuery.push({ email });
+      if (username) orQuery.push({ username });
+      if (orQuery.length) {
+        const existingUser = await User.findOne({ $or: orQuery });
+        if (existingUser) {
+          return res.status(400).json({
+            success: false,
+            message: 'User with this email or username already exists',
+          });
+        }
+      }
+
+      // If username not provided, derive from email or generate a fallback
+      if (!username) {
+        const localBase = email ? email.split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '') : 'user';
+        let candidate = `${localBase}-${Date.now().toString().slice(-4)}`;
+        // Ensure uniqueness (simple loop; should be rare)
+        let exists = await User.findOne({ username: candidate });
+        let counter = 1;
+        while (exists) {
+          candidate = `${localBase}-${Date.now().toString().slice(-4)}-${counter}`;
+          exists = await User.findOne({ username: candidate });
+          counter += 1;
+          if (counter > 10) break;
+        }
+        username = candidate;
+      }
+
+      // Create new user object and include password for hashing
+      const user = new User({
+        username,
+        email: email || undefined,
+        password,
+        firstName: firstName || undefined,
+        lastName: lastName || undefined,
+        major,
+        year,
+        bio,
+        authProvider: 'local',
       });
-    }
 
-    const { username, firstName, lastName, major, year, bio } = req.body;
+      await user.save();
 
-    // Check if user already exists. If email is provided, check both email and username;
-    // otherwise check username only.
-    let existingUser;
-    if (email) {
-      existingUser = await User.findOne({ $or: [{ email }, { username }] });
-    } else {
-      existingUser = await User.findOne({ username });
-    }
+      // Generate JWT token
+      const token = jwt.sign(
+        { userId: user._id },
+        process.env.JWT_SECRET || 'fallback-secret',
+        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      );
 
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'User with this email or username already exists'
+      res.status(201).json({
+        success: true,
+        message: 'User registered successfully',
+        token,
+        user: user.toPublicJSON(),
       });
+    } catch (error) {
+      console.error('Registration error:', error);
+      // Mongoose duplicate key error handling
+      if (error && error.code === 11000) {
+        return res.status(400).json({ success: false, message: 'Email or username already in use' });
+      }
+      res.status(500).json({ success: false, message: 'Failed to register user', error: error.message });
     }
-
-    // Create new user
-    const user = new User({
-      username,
-      firstName,
-      lastName,
-      major,
-      year,
-      bio,
-      authProvider: 'local' // Explicitly set as local auth
-    });
-
-    await user.save();
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET || 'fallback-secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-    );
-
-    res.status(201).json({
-      success: true,
-      message: 'User registered successfully',
-      token,
-      user: user.toPublicJSON()
-    });
-
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to register user',
-      error: error.message
-    });
   }
-});
+);
 
 // Login user
 router.post('/login', [
@@ -186,9 +202,13 @@ router.get('/verify', async (req, res) => {
       });
     }
 
+    // Compute whether the user still needs to complete profile
+    const needsProfile = !user.username || !user.firstName || !user.lastName;
+
     res.json({
       success: true,
-      user: user.toPublicJSON()
+      user: user.toPublicJSON(),
+      needsProfile
     });
 
   } catch (error) {
@@ -196,97 +216,6 @@ router.get('/verify', async (req, res) => {
     res.status(401).json({
       success: false,
       message: 'Invalid token'
-    });
-  }
-});
-
-// Google OAuth token exchange
-router.post('/google', async (req, res) => {
-  try {
-    const { idToken } = req.body;
-
-    if (!idToken) {
-      return res.status(400).json({
-        success: false,
-        message: 'Google ID token is required'
-      });
-    }
-
-    // Verify the Google ID token
-    const ticket = await googleClient.verifyIdToken({
-      idToken: idToken,
-      audience: process.env.GOOGLE_CLIENT_ID
-    });
-
-    const payload = ticket.getPayload();
-    const { sub: googleId, email, given_name: firstName, family_name: lastName, picture: profilePicture, email_verified } = payload;
-
-    // Find existing user by googleId OR by email (so we can link accounts)
-    let user = await User.findOne({
-      $or: [ { googleId: googleId }, { email: email } ]
-    });
-
-    let needsProfile = false;
-
-    if (user) {
-      // Link Google account to existing user (if not already linked)
-      let changed = false;
-      if (!user.googleId) {
-        user.googleId = googleId;
-        changed = true;
-      }
-      // Mark that Google is an auth method for this account
-      if (user.authProvider !== 'google') {
-        user.authProvider = 'google';
-        changed = true;
-      }
-      if (!user.isActive) {
-        user.isActive = true;
-        changed = true;
-      }
-
-      // If required profile fields are missing, flag as needsProfile so frontend can route user
-      if (!user.username || !user.firstName || !user.lastName) needsProfile = true;
-
-      user.lastLogin = new Date();
-      if (changed) await user.save();
-      else await user.save();
-    } else {
-      // Create minimal user record for Google sign-in. Other profile fields
-      // (username, names, etc.) will be collected later via the create-account flow.
-      user = new User({
-        email,
-        googleId,
-        authProvider: 'google',
-        isActive: true,
-      });
-      await user.save();
-      needsProfile = true;
-    }
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET || 'fallback-secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-    );
-
-    // Respond with token and user info
-    res.json({
-      success: true,
-      message: 'Google authentication successful',
-      token,
-      user: user.toPublicJSON(),
-      needsProfile
-    });
-
-  // error handling
-  } catch (error) {
-    console.error('Google auth error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Google authentication failed',
-      error: error.message
     });
   }
 });

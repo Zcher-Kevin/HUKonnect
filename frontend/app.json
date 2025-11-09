@@ -20,6 +20,12 @@
     "slug": "hukonnect",
     "android": {
       "package": "com.hukonnect"
+    },
+    "ios": {
+      "bundleIdentifier": "com.hukonnect",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     }
   }
 }

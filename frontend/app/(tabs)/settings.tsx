@@ -22,7 +22,7 @@ export default function SettingsScreen() {
 
   const logout = () => {
     // later: clear any tokens/AsyncStorage here
-    router.replace("/auth/login"); // back to Google login
+    router.replace("/auth/login"); // back to app login
   };
 
   return (
@@ -61,7 +61,11 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      <TouchableOpacity style={styles.logout} activeOpacity={0.9} onPress={logout}>
+      <TouchableOpacity
+        style={styles.logout}
+        activeOpacity={0.9}
+        onPress={logout}
+      >
         <Text style={styles.logoutText}>Log out</Text>
       </TouchableOpacity>
     </SafeAreaView>
