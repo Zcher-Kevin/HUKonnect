@@ -188,6 +188,14 @@ export default function LoginScreen() {
             </div>
           ) : null}
 
+          {/* Development-only debug note to show resolved API_BASE and test credentials */}
+          {typeof __DEV__ !== "undefined" && __DEV__ ? (
+            <Text style={styles.note}>
+              DEV: API_BASE = {API_BASE}
+              {"\n"}Example test accounts: john@hu.edu / password123
+            </Text>
+          ) : null}
+
           <Text style={{ textAlign: "center", color: "#231F20", opacity: 0.7 }}>
             or
           </Text>

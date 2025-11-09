@@ -266,6 +266,30 @@ export default function CreateAccount() {
     }
   };
 
+  // Form validation for enabling the Create Account button.
+  // Rules:
+  // - If the user starts entering manual credentials (email or password),
+  //   require email, password and confirmPassword, a valid email, minimum
+  //   password length, and matching confirmation.
+  // - Otherwise require at least a first name so an account has an identity.
+  const hasManualCreds = Boolean(
+    (emailInput && emailInput.trim()) || passwordInput || confirmPassword
+  );
+
+  const manualCredsValid = Boolean(
+    emailInput &&
+      emailInput.trim() &&
+      isValidEmail(emailInput) &&
+      passwordInput &&
+      passwordInput.length >= 6 &&
+      confirmPassword &&
+      passwordInput === confirmPassword
+  );
+
+  const isFormValid = hasManualCreds
+    ? manualCredsValid
+    : Boolean(first && first.trim());
+
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView
@@ -417,10 +441,30 @@ export default function CreateAccount() {
           </View>
 
           <TouchableOpacity
-            style={[styles.btn, { width: WRAP_W, opacity: busy ? 0.8 : 1 }]}
+            style={[
+              styles.btn,
+              { width: WRAP_W, opacity: busy || !isFormValid ? 0.6 : 1 },
+            ]}
             activeOpacity={0.9}
-            onPress={onCreate}
-            disabled={busy}
+            onPress={async () => {
+              if (!isFormValid) {
+                // Provide a friendly hint when user tries to submit an invalid form
+                if (hasManualCreds) {
+                  Alert.alert(
+                    "Create Account",
+                    "Please provide a valid email and matching password (min 6 characters)."
+                  );
+                } else {
+                  Alert.alert(
+                    "Create Account",
+                    "Please enter your first name."
+                  );
+                }
+                return;
+              }
+              await onCreate();
+            }}
+            disabled={busy || !isFormValid}
           >
             {busy ? (
               <ActivityIndicator color="#fff" />
@@ -428,6 +472,15 @@ export default function CreateAccount() {
               <Text style={styles.btnText}>Create Account</Text>
             )}
           </TouchableOpacity>
+
+          {/* When the form is disabled show a small hint about what's required */}
+          {!isFormValid ? (
+            <Text style={{ color: SUBTEXT, textAlign: "center", marginTop: 6 }}>
+              {hasManualCreds
+                ? "Email + password required. Passwords must match and be at least 6 characters."
+                : "Please enter your first name to continue (or provide email + password)."}
+            </Text>
+          ) : null}
 
           <Text style={styles.terms}>
             By creating an account, you agree to our Terms and{"\n"}Conditions.

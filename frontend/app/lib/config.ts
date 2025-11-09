@@ -75,3 +75,11 @@ export const API_BASE = (() => {
 export default {
   API_BASE,
 };
+
+// Development runtime log to make debugging easier: print resolved API_BASE
+try {
+  // eslint-disable-next-line no-console
+  console.log(`[config] API_BASE resolved to: ${API_BASE}`);
+} catch (e) {
+  // ignore logging errors in environments that block console
+}

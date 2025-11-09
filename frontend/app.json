@@ -5,6 +5,7 @@
       "eas": {
         "projectId": "313fa424-e742-4938-800f-f658b7708ca8"
       },
+      "API_BASE": "http://localhost:3000",
       "EXPO_PUBLIC_GOOGLE_IOS_ID": "YOUR_IOS_CLIENT_ID.apps.googleusercontent.com",
       "EXPO_PUBLIC_GOOGLE_ANDROID_ID": "YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com",
       "EXPO_PUBLIC_GOOGLE_WEB_ID": "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com",
