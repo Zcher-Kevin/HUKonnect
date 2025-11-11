@@ -35,7 +35,7 @@ import { API_BASE } from "../lib/config";
 // Developer convenience: when true, clicking Create Account will skip
 // real network registration and immediately let you into the app.
 // WARNING: For production builds this MUST be false.
-const DEV_QUICK_REGISTER = true;
+const DEV_QUICK_REGISTER = false; // Set to false to perform real registration against the backend.
 
 const MAROON = "#A2172C";
 const BG = "#FFF7F7";
@@ -87,7 +87,7 @@ export default function CreateAccount() {
 
   /**
    * =================================
-   * API CALL (PUT /users/me/profile)
+   * API CALL (PUT /users/profile)
    * =================================
    * Sends the profile to the backend using the app's session token.
    * The backend should:
@@ -125,6 +125,34 @@ export default function CreateAccount() {
 
     // Retrieve your JWT created during Google sign-in (if you saved one)
     let token = (await storageGetItem("token")) as string | null;
+    try {
+      // eslint-disable-next-line no-console
+      if ((globalThis as any).__DEV__)
+        console.log("[submitProfile] stored token present:", Boolean(token));
+    } catch (e) {}
+
+    // Defensive: if a non-JWT token (for example a leftover dev token like
+    // "dev-token-...") is stored, clear it so we don't send it to the
+    // backend where jwt.verify will throw a 'jwt malformed' error. A JWT
+    // typically has three dot-separated segments.
+    if (token && typeof token === "string") {
+      const parts = token.split(".");
+      if (parts.length !== 3) {
+        try {
+          // eslint-disable-next-line no-console
+          if ((globalThis as any).__DEV__)
+            console.warn(
+              "[submitProfile] stored token is not a JWT; clearing stored token"
+            );
+        } catch (e) {}
+        try {
+          await storageSetItem("token", "");
+        } catch (e) {
+          // ignore storage errors
+        }
+        token = null;
+      }
+    }
 
     // If there's no token, attempt to register the user. Priority:
     // 1) If the user manually provided email+password on this screen, use that.
@@ -152,16 +180,21 @@ export default function CreateAccount() {
 
           const safeFirst =
             first.trim() || `User${Date.now().toString().slice(-4)}`;
-          const registerRes = await axios.post(
-            `${API_BASE}/api/auth/register`,
-            {
+          const registerRes = await (() => {
+            const url = `${API_BASE}/api/auth/register`;
+            const body = {
               email: emailInput.trim(),
               password: passwordInput,
               firstName: safeFirst,
               ...(last.trim() ? { lastName: last.trim() } : {}),
-            },
-            { timeout: 15000 }
-          );
+            };
+            // Debug: log exact request target and body in dev
+            try {
+              // eslint-disable-next-line no-console
+              console.log("[register] POST", url, body);
+            } catch (e) {}
+            return axios.post(url, body, { timeout: 15000 });
+          })();
 
           token = registerRes.data?.token;
           if (token) {
@@ -188,17 +221,21 @@ export default function CreateAccount() {
           const safeFirst =
             first.trim() || `User${Date.now().toString().slice(-4)}`;
 
-          const registerRes = await axios.post(
-            `${API_BASE}/api/auth/register`,
-            {
+          const registerRes = await (() => {
+            const url = `${API_BASE}/api/auth/register`;
+            const body = {
               username: usernameCandidate,
               ...(email ? { email } : {}),
               password: randomPassword,
               firstName: safeFirst,
               ...(last.trim() ? { lastName: last.trim() } : {}),
-            },
-            { timeout: 15000 }
-          );
+            };
+            try {
+              // eslint-disable-next-line no-console
+              console.log("[register] POST", url, body);
+            } catch (e) {}
+            return axios.post(url, body, { timeout: 15000 });
+          })();
 
           token = registerRes.data?.token;
           if (token) {
@@ -207,16 +244,16 @@ export default function CreateAccount() {
         }
       } catch (regErr: any) {
         // Log details for debugging (do not show raw tokens in UI)
+        // eslint-disable-next-line no-console
         console.error("Register error details:", {
           message: regErr?.message,
+          status: regErr?.response?.status,
           response: regErr?.response?.data,
         });
-        // bubble a helpful error to the UI
-        throw new Error(
-          regErr?.response?.data?.message ||
-            regErr?.message ||
-            "Failed to register user. Please sign in and try again."
-        );
+        // bubble a helpful error to the UI including status when available
+        const status = regErr?.response?.status;
+        const serverMsg = regErr?.response?.data?.message || regErr?.message;
+        throw new Error(status ? `Status ${status}: ${serverMsg}` : serverMsg);
       }
     }
 
@@ -231,10 +268,22 @@ export default function CreateAccount() {
     if (gender.trim()) payload.gender = gender.trim();
     payload.termsAccepted = true;
 
-    const res = await axios.put(`${API_BASE}/api/users/me/profile`, payload, {
+    // Note: backend mounts user routes at /api/users and exposes the
+    // current-user profile endpoints at /profile (not /me/profile).
+    const res = await axios.put(`${API_BASE}/api/users/profile`, payload, {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       timeout: 15000,
     });
+
+    try {
+      // eslint-disable-next-line no-console
+      if ((globalThis as any).__DEV__)
+        console.log(
+          "[submitProfile] PUT",
+          `${API_BASE}/api/users/profile`,
+          payload
+        );
+    } catch (e) {}
 
     return res.data; // expected { user: {...} } (shape up to your backend)
   };

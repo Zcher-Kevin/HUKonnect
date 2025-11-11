@@ -64,7 +64,10 @@ export const API_BASE = (() => {
 
   // 4) android emulator
   if (Platform.OS === 'android') {
-    // 10.0.2.2 maps to host machine when using the standard Android emulator (AVD).
+    // Force Android emulator to use the host machine address. This ensures
+    // the standard Android AVD (10.0.2.2) can reach a backend running on
+    // the developer machine (localhost:3000). Keep this as a dev-only
+    // convenience — change/remove before deploying to physical devices.
     return `http://10.0.2.2:${DEFAULT_PORT}`;
   }
 

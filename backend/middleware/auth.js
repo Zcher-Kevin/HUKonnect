@@ -12,8 +12,20 @@ const auth = async (req, res, next) => {
       });
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret');
+    // Verify token. jwt.verify will throw for malformed tokens; catch that
+    // specific error and return a concise 401 without printing a full stack
+    // to server logs (which can be noisy for many malformed requests).
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret');
+    } catch (err) {
+      // Log minimal info: method + url + error message (do NOT log token)
+      console.warn(`[auth] jwt verify failed for ${req.method} ${req.originalUrl}: ${err.message}`);
+      return res.status(401).json({
+        success: false,
+        message: 'Token is not valid'
+      });
+    }
     
     // Find user
     const user = await User.findById(decoded.userId);

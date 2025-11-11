@@ -116,7 +116,7 @@ export default function LoginScreen() {
           );
         }}
       >
-        <Icon />
+      <Icon />
 
         <View style={{ width: "100%" }}>
           <Text style={styles.title}>Welcome to HUKonnect</Text>

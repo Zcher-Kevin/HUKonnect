@@ -165,6 +165,22 @@ export default function ScheduleScreen() {
           const storage = require("../app/lib/storage");
           if (storage && storage.getItem) {
             token = (await storage.getItem("token")) || undefined;
+            // Defensive: if token looks like a dev placeholder (not a JWT),
+            // ignore it for namespacing. This avoids using non-JWT strings in
+            // storage keys and prevents accidental sending later on.
+            if (token) {
+              const parts = token.split(".");
+              if (parts.length !== 3) {
+                try {
+                  // eslint-disable-next-line no-console
+                  if ((globalThis as any).__DEV__)
+                    console.warn(
+                      "[Schedule] stored token is not a JWT; ignoring for storage key"
+                    );
+                } catch (e) {}
+                token = undefined;
+              }
+            }
           }
         } catch (e) {
           // storage not available yet; ignore and continue with default key

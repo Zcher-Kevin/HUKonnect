@@ -55,6 +55,17 @@ app.get('/', (req, res) => {
   });
 });
 
+// Short-lived request logger for debugging route issues. This logs method,
+// path, remote IP and whether an Authorization header was provided. It
+// intentionally does not log the token value to avoid leaking secrets.
+app.use((req, res, next) => {
+  try {
+    const hasAuth = Boolean(req.headers && (req.headers.authorization || req.headers.Authorization));
+    console.log(`[req] ${req.ip} ${req.method} ${req.originalUrl} auth:${hasAuth}`);
+  } catch (e) {}
+  next();
+});
+
 // Test route
 app.get('/api/test', (req, res) => {
   res.json({ 
@@ -70,6 +81,18 @@ const userRoutes = require('./routes/users');
 const eventRoutes = require('./routes/events');
 const groupRoutes = require('./routes/groups');
 const adminRoutes = require('./routes/admin');
+
+// Compatibility shim: accept legacy client calls to /api/users/me/profile
+// and rewrite them to /api/users/profile. This is a small development-only
+// convenience to avoid 404s from older client bundles while we update apps.
+app.use((req, res, next) => {
+  try {
+    if (req.originalUrl && req.originalUrl.includes('/api/users/me/profile')) {
+      req.url = req.url.replace('/me/profile', '/profile');
+    }
+  } catch (e) {}
+  next();
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
