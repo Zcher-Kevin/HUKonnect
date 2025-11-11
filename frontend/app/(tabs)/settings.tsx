@@ -1,4 +1,11 @@
-import React, { useState } from "react";
+// app/(tabs)/settings.tsx
+// Settings screen:
+// - Make schedule visible to others (for CURRENT_USER_ID only)
+// - Enable notifications (frontend flag only)
+// - Change profile information button -> /edit-profile
+// - Logout left as-is (handled elsewhere)
+
+import React from "react";
 import {
   SafeAreaView,
   View,
@@ -6,101 +13,169 @@ import {
   StyleSheet,
   Switch,
   TouchableOpacity,
+  Dimensions,
   Platform,
 } from "react-native";
 import { router } from "expo-router";
+import {
+  getCurrentScheduleVisible,
+  setCurrentScheduleVisible,
+  getNotificationsEnabled,
+  setNotificationsEnabled,
+  useStoreVersion,
+} from "../lib/followStore";
 
-const MAROON = "#A2172C";
 const BG = "#FFF7F7";
 const TEXT = "#231F20";
-const SUBTEXT = "#7A6F6F";
-const CARD = "#ffffff";
+const SUB = "#7A6F6F";
+const MAROON = "#A2172C";
+
+const { width: W } = Dimensions.get("window");
+const WRAP_W = Math.min(900, W * 0.96);
 
 export default function SettingsScreen() {
-  const [visibleToOthers, setVisibleToOthers] = useState(false);
-  const [notifications, setNotifications] = useState(false); // placeholder toggle
+  // subscribe so toggles stay in sync if changed elsewhere
+  useStoreVersion();
+
+  const scheduleVisible = getCurrentScheduleVisible();
+  const notifications = getNotificationsEnabled();
+
+  const onToggleSchedule = (value: boolean) => {
+    setCurrentScheduleVisible(value);
+  };
+
+  const onToggleNotifications = (value: boolean) => {
+    setNotificationsEnabled(value);
+  };
+
+  const goEditProfile = () => {
+    router.push("/(tabs)/edit-profile");
+  };
 
   const logout = () => {
-    // later: clear any tokens/AsyncStorage here
-    router.replace("/auth/login"); // back to Google login
+    // BACKEND/TODO: clear auth tokens / session server-side.
+    // FRONTEND: navigate back to login.
+    router.replace("/auth/login");
   };
 
   return (
     <SafeAreaView style={styles.screen}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Settings</Text>
-      </View>
+      <View style={[styles.wrap, { width: WRAP_W }]}>
+        <Text style={styles.title}>Settings</Text>
 
-      <View style={styles.card}>
+        {/* Schedule visibility */}
         <View style={styles.row}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Make schedule visible to others</Text>
-            <Text style={styles.sub}>This toggle does nothing yet.</Text>
+          <View style={styles.textWrap}>
+            <Text style={styles.label}>Make schedule visible to others</Text>
+            <Text style={styles.help}>
+              When enabled, other students can see your schedule on your profile.
+            </Text>
           </View>
           <Switch
-            value={visibleToOthers}
-            onValueChange={setVisibleToOthers}
-            thumbColor={Platform.OS === "android" ? "#fff" : undefined}
-            trackColor={{ false: "#ddd", true: MAROON }}
+            value={scheduleVisible}
+            onValueChange={onToggleSchedule}
+            trackColor={{ false: "#ccc", true: MAROON }}
+            thumbColor={scheduleVisible ? "#00A69C" : "#f4f3f4"}
           />
         </View>
 
-        <View style={styles.divider} />
-
+        {/* Notifications */}
         <View style={styles.row}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Enable notifications</Text>
-            <Text style={styles.sub}>Placeholder (no-op for now).</Text>
+          <View style={styles.textWrap}>
+            <Text style={styles.label}>Enable notifications</Text>
+            <Text style={styles.help}>
+              Allow HUKonnect to send updates about messages and events.
+            </Text>
           </View>
           <Switch
             value={notifications}
-            onValueChange={setNotifications}
-            thumbColor={Platform.OS === "android" ? "#fff" : undefined}
-            trackColor={{ false: "#ddd", true: MAROON }}
+            onValueChange={onToggleNotifications}
+            trackColor={{ false: "#ccc", true: MAROON }}
+            thumbColor={notifications ? "#00A69C" : "#f4f3f4"}
           />
         </View>
-      </View>
 
-      <TouchableOpacity style={styles.logout} activeOpacity={0.9} onPress={logout}>
-        <Text style={styles.logoutText}>Log out</Text>
-      </TouchableOpacity>
+        {/* Change profile info */}
+        <TouchableOpacity
+          style={styles.primaryBtn}
+          activeOpacity={0.9}
+          onPress={goEditProfile}
+        >
+          <Text style={styles.primaryText}>Change profile information</Text>
+        </TouchableOpacity>
+
+        {/* Log out */}
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          activeOpacity={0.9}
+          onPress={logout}
+        >
+          <Text style={styles.logoutText}>Log out</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: BG, padding: 16 },
-  header: { alignItems: "center", marginBottom: 8 },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: TEXT },
-
-  card: {
-    backgroundColor: CARD,
-    borderRadius: 16,
-    padding: 16,
-    gap: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-
-  row: { flexDirection: "row", alignItems: "center", gap: 12 },
-  title: { color: TEXT, fontSize: 16, fontWeight: "700" },
-  sub: { color: SUBTEXT, fontSize: 12, marginTop: 2 },
-
-  divider: {
-    height: 1,
-    backgroundColor: "#EEE",
-    marginVertical: 6,
-  },
-
-  logout: {
-    marginTop: 16,
-    backgroundColor: MAROON,
-    paddingVertical: 16,
-    borderRadius: 999,
+  screen: {
+    flex: 1,
+    backgroundColor: BG,
+    paddingTop: Platform.select({ ios: 8, android: 8, web: 16 }),
     alignItems: "center",
   },
-  logoutText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  wrap: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: TEXT,
+    marginBottom: 16,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+  textWrap: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  label: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: TEXT,
+  },
+  help: {
+    fontSize: 13,
+    color: SUB,
+    marginTop: 2,
+  },
+  primaryBtn: {
+    marginTop: 8,
+    backgroundColor: MAROON,
+    borderRadius: 999,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  primaryText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  logoutBtn: {
+    marginTop: 10,
+    backgroundColor: "#fff",
+    borderRadius: 999,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#eee",
+  },
+  logoutText: {
+    color: MAROON,
+    fontWeight: "700",
+    fontSize: 15,
+  },
 });

@@ -1,7 +1,7 @@
-// app/auth/create-account.tsx
-// Create account form with email + profile info.
-// Gender + Year of Study use fixed option pickers (no free text).
-// BACKEND TODO: hook onCreate into /auth/register.
+// app/(tabs)/edit-profile.tsx
+// Edit profile info screen, mirroring create-account but prefilled.
+// Uses the same Gender + Year of Study option pickers.
+// BACKEND TODO: load current user + PATCH on save.
 
 import React, { useState } from "react";
 import {
@@ -31,64 +31,73 @@ const RADIUS = 20;
 const GENDER_OPTIONS = ["Male", "Female"];
 const YEAR_OPTIONS = ["1", "2", "3", "4", "5", "Masters", "PhD"];
 
-export default function CreateAccount() {
-  const [email, setEmail] = useState("");
-  const [first, setFirst] = useState("");
-  const [last, setLast] = useState("");
-  const [major, setMajor] = useState("");
-  const [minor, setMinor] = useState("");
-  const [day, setDay] = useState("");
-  const [month, setMonth] = useState("");
-  const [year, setYear] = useState("");
-  const [gender, setGender] = useState<"Male" | "Female" | "">("");
+// FRONTEND: placeholder current user.
+// BACKEND TODO: replace with data from auth/user context or API.
+const CURRENT_USER = {
+  email: "you@example.edu",
+  firstName: "Your",
+  lastName: "Name",
+  major: "Computer Science",
+  minor: "",
+  dob: { day: "01", month: "09", year: "2000" },
+  gender: "Male" as "Male" | "Female" | "",
+  yearOfStudy: "3" as (typeof YEAR_OPTIONS)[number] | "",
+};
+
+export default function EditProfile() {
+  const [email, setEmail] = useState(CURRENT_USER.email);
+  const [first, setFirst] = useState(CURRENT_USER.firstName);
+  const [last, setLast] = useState(CURRENT_USER.lastName);
+  const [major, setMajor] = useState(CURRENT_USER.major);
+  const [minor, setMinor] = useState(CURRENT_USER.minor);
+  const [day, setDay] = useState(CURRENT_USER.dob.day);
+  const [month, setMonth] = useState(CURRENT_USER.dob.month);
+  const [year, setYear] = useState(CURRENT_USER.dob.year);
+  const [gender, setGender] = useState<"Male" | "Female" | "">(
+    CURRENT_USER.gender || ""
+  );
   const [yearOfStudy, setYearOfStudy] =
-    useState<"" | (typeof YEAR_OPTIONS)[number]>("");
+    useState<"" | (typeof YEAR_OPTIONS)[number]>(
+      CURRENT_USER.yearOfStudy || ""
+    );
 
-  const onCreate = async () => {
+  const onSave = async () => {
     const trimmedEmail = email.trim();
-
-    if (!trimmedEmail) {
-      Alert.alert("Missing email", "Please enter your email.");
-      return;
-    }
-    if (!trimmedEmail.includes("@")) {
+    if (!trimmedEmail || !trimmedEmail.includes("@")) {
       Alert.alert("Check email", "Please enter a valid email address.");
       return;
     }
 
-    // BACKEND: this is the payload shape you’ll receive.
     const payload = {
       email: trimmedEmail,
       firstName: first.trim(),
       lastName: last.trim(),
       major: major.trim(),
       minor: minor.trim(),
-      dob: {
-        day: day.trim(),
-        month: month.trim(),
-        year: year.trim(),
-      },
+      dob: { day: day.trim(), month: month.trim(), year: year.trim() },
       gender: gender || null,
       yearOfStudy: yearOfStudy || null,
     };
 
     try {
       // BACKEND TODO:
-      // const res = await fetch("http://<backend>/auth/register", {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
+      // const res = await fetch("http://<backend>/users/me", {
+      //   method: "PATCH",
+      //   headers: {
+      //     "Content-Type": "application/json",
+      //     Authorization: `Bearer ${token}`,
+      //   },
       //   body: JSON.stringify(payload),
       // });
-      // if (!res.ok) throw new Error("Registration failed");
-      // const data = await res.json();
-      // store auth token + user etc here.
+      // if (!res.ok) throw new Error("Update failed");
 
-      router.replace("/(tabs)");
+      Alert.alert("Saved", "Your profile has been updated.");
+      router.back();
     } catch (err) {
       console.error(err);
       Alert.alert(
-        "Registration failed",
-        "We couldn't create your account. Please try again."
+        "Update failed",
+        "We couldn't save your changes. Please try again."
       );
     }
   };
@@ -100,7 +109,18 @@ export default function CreateAccount() {
         contentContainerStyle={[styles.content, { width: WRAP_W }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.header}>Create Account</Text>
+        {/* Back + title */}
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.backText}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.header}>Edit Profile</Text>
+          <View style={{ width: 24 }} />
+        </View>
 
         <Text style={styles.sectionTitle}>Your Information</Text>
 
@@ -238,14 +258,10 @@ export default function CreateAccount() {
         <TouchableOpacity
           style={[styles.btn, { width: WRAP_W }]}
           activeOpacity={0.9}
-          onPress={onCreate}
+          onPress={onSave}
         >
-          <Text style={styles.btnText}>Create Account</Text>
+          <Text style={styles.btnText}>Save changes</Text>
         </TouchableOpacity>
-
-        <Text style={styles.terms}>
-          By creating an account, you agree to our Terms and{"\n"}Conditions.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -263,12 +279,25 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 24,
   },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  backBtn: {
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  backText: {
+    fontSize: 22,
+    color: TEXT,
+  },
   header: {
-    alignSelf: "center",
+    flex: 1,
+    textAlign: "center",
     fontSize: 18,
     fontWeight: "700",
     color: TEXT,
-    marginBottom: 6,
   },
   sectionTitle: {
     fontSize: 22,
@@ -339,17 +368,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 999,
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 12,
   },
   btnText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
-  },
-  terms: {
-    color: SUBTEXT,
-    textAlign: "center",
-    marginTop: 10,
-    lineHeight: 18,
   },
 });
