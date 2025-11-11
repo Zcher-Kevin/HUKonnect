@@ -278,6 +278,36 @@ export default function ScheduleScreen() {
   };
 
   const GRID_HEIGHT = (END_HOUR - START_HOUR) * HOUR_HEIGHT;
+  // Start the view at 6AM but keep the grid covering the full day (0..24)
+  const INITIAL_VIEW_HOUR = 7;
+  const initialOffset = (INITIAL_VIEW_HOUR - START_HOUR) * HOUR_HEIGHT;
+  const scrollRefs = useRef<any[]>([]);
+
+  // Some platforms (web / RN) may ignore contentOffset; ensure we programmatically
+  // set scroll position once the columns mount.
+  useEffect(() => {
+    // small delay to allow layout
+    const id = setTimeout(() => {
+      try {
+        scrollRefs.current.forEach((r) => {
+          if (!r) return;
+          // many RN ScrollView implementations expose `scrollTo`
+          if (typeof r.scrollTo === "function") {
+            r.scrollTo({ y: initialOffset, animated: false });
+            return;
+          }
+          // react-native-web exposes a DOM node under `_node` or `_nativeRef`
+          const node = r._nativeRef || r._node || r;
+          if (node && typeof node.scrollTo === "function") {
+            try {
+              node.scrollTo(0, initialOffset);
+            } catch (e) {}
+          }
+        });
+      } catch (e) {}
+    }, 50);
+    return () => clearTimeout(id);
+  }, [days]);
 
   return (
     <>
@@ -304,9 +334,12 @@ export default function ScheduleScreen() {
               </View>
 
               <ScrollView
+                ref={(el) => (scrollRefs.current[i] = el)}
                 style={{ height: Math.max(H * 0.65, 420) }}
                 contentContainerStyle={{ height: GRID_HEIGHT }}
                 showsVerticalScrollIndicator
+                // set initial offset so view opens at INITIAL_VIEW_HOUR
+                contentOffset={{ x: 0, y: initialOffset }}
               >
                 <View style={{ position: "relative", height: GRID_HEIGHT }}>
                   {timeRows.map((h, idx) => (
