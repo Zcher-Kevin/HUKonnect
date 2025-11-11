@@ -39,7 +39,7 @@ router.put('/profile', auth, async (req, res) => {
   // Allow these profile fields to be updated from the mobile client.
   // Expanded to include minor, dob, gender and termsAccepted which the
   // frontend may send from the Create Account screen.
-  const allowedUpdates = ['firstName', 'lastName', 'major', 'minor', 'year', 'dob', 'gender', 'bio', 'interests', 'termsAccepted'];
+  const allowedUpdates = ['firstName', 'lastName', 'major', 'minor', 'year', 'dob', 'gender', 'bio', 'interests', 'termsAccepted', 'schedule'];
     const updates = {};
 
     // Only include allowed fields
@@ -56,6 +56,27 @@ router.put('/profile', auth, async (req, res) => {
         updates.birthDate = parsed;
       }
       delete updates.dob;
+    }
+
+    // Sanitize schedule if provided: ensure an array of simple objects with expected fields.
+    if (updates.schedule && Array.isArray(updates.schedule)) {
+      try {
+        updates.schedule = updates.schedule.map(item => {
+          const clean = {};
+          clean.id = item.id ? String(item.id) : `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+          clean.title = item.title ? String(item.title).slice(0, 200) : 'Untitled';
+          clean.color = item.color ? String(item.color) : '#CFE2FF';
+          clean.startMins = Number(item.startMins) || 0;
+          clean.endMins = Number(item.endMins) || 0;
+          clean.recurrence = item.recurrence === 'once' ? 'once' : 'weekly';
+          if (typeof item.dayIdx === 'number') clean.dayIdx = item.dayIdx;
+          if (item.date) clean.date = String(item.date);
+          return clean;
+        });
+      } catch (e) {
+        // If sanitization fails, remove schedule update to avoid breaking validation
+        delete updates.schedule;
+      }
     }
 
     const user = await User.findByIdAndUpdate(

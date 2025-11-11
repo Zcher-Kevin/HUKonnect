@@ -94,6 +94,18 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Event'
   }]
+  ,
+  // Personal schedule: array of lightweight event objects saved by the user
+  schedule: [{
+    id: { type: String },
+    title: { type: String, trim: true, maxlength: 200 },
+    color: { type: String, trim: true },
+    startMins: { type: Number, min: 0, max: 24 * 60 },
+    endMins: { type: Number, min: 0, max: 24 * 60 },
+    recurrence: { type: String, enum: ['once', 'weekly'], default: 'weekly' },
+    dayIdx: { type: Number, min: 0, max: 6, required: false },
+    date: { type: String, required: false }, // ISO date string for one-time events
+  }],
 }, {
   timestamps: true
 });

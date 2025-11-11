@@ -14,6 +14,9 @@ import {
   Pressable,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import { getItem as storageGetItem } from "../app/lib/storage";
+import { API_BASE } from "../app/lib/config";
 
 const MAROON = "#A2172C";
 const TEXT = "#231F20";
@@ -152,42 +155,46 @@ export default function ScheduleScreen() {
   const storageKeyRef = useRef<string | null>(null);
 
   // On mount, compute storage key (optionally namespace by user token) and load saved events
+  // If the user has a valid JWT, attempt to load the schedule from the backend
+  // profile endpoint. Otherwise fall back to AsyncStorage.
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        // Try to get token from our storage wrapper if available; fall back to
-        // no-token behavior when storage isn't ready to avoid crashing on
-        // clients that don't expose native modules yet.
         let token: string | undefined = undefined;
         try {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const storage = require("../app/lib/storage");
-          if (storage && storage.getItem) {
-            token = (await storage.getItem("token")) || undefined;
-            // Defensive: if token looks like a dev placeholder (not a JWT),
-            // ignore it for namespacing. This avoids using non-JWT strings in
-            // storage keys and prevents accidental sending later on.
-            if (token) {
-              const parts = token.split(".");
-              if (parts.length !== 3) {
-                try {
-                  // eslint-disable-next-line no-console
-                  if ((globalThis as any).__DEV__)
-                    console.warn(
-                      "[Schedule] stored token is not a JWT; ignoring for storage key"
-                    );
-                } catch (e) {}
-                token = undefined;
-              }
-            }
-          }
+          token = (await storageGetItem("token")) || undefined;
         } catch (e) {
-          // storage not available yet; ignore and continue with default key
+          token = undefined;
+        }
+
+        // If token looks like a JWT (three dot-separated parts), try backend first
+        if (token && token.split(".").length === 3) {
+          try {
+            const res = await axios.get(`${API_BASE}/api/users/profile`, {
+              headers: { Authorization: `Bearer ${token}` },
+              timeout: 5000,
+            });
+            const user = res.data?.user;
+            if (user && Array.isArray(user.schedule) && user.schedule.length) {
+              if (mounted) setEvents(user.schedule as EventItem[]);
+              try {
+                const key = `${STORAGE_KEY_BASE}:${token.slice(-8)}`;
+                storageKeyRef.current = key;
+                await AsyncStorage.setItem(
+                  key,
+                  JSON.stringify(user.schedule || [])
+                );
+              } catch (e) {}
+              return;
+            }
+          } catch (err) {
+            // network or profile read failed; fall back to local storage
+          }
         }
 
         const key = token
-          ? `${STORAGE_KEY_BASE}:${token.slice(-8)}`
+          ? `${STORAGE_KEY_BASE}:${(token as string).slice(-8)}`
           : STORAGE_KEY_BASE;
         storageKeyRef.current = key;
         const raw = await AsyncStorage.getItem(key);
@@ -210,14 +217,32 @@ export default function ScheduleScreen() {
     };
   }, []);
 
-  // Save whenever events change
+  // Save whenever events change: persist locally, and try to push to backend when
+  // a valid JWT is present so schedules survive logins.
   useEffect(() => {
     (async () => {
       try {
         const key = storageKeyRef.current || STORAGE_KEY_BASE;
         await AsyncStorage.setItem(key, JSON.stringify(events));
       } catch (err) {
-        console.warn("Failed to save schedule:", err);
+        console.warn("Failed to save schedule locally:", err);
+      }
+
+      try {
+        const token = (await storageGetItem("token")) || undefined;
+        if (
+          token &&
+          typeof token === "string" &&
+          token.split(".").length === 3
+        ) {
+          await axios.put(
+            `${API_BASE}/api/users/profile`,
+            { schedule: events },
+            { headers: { Authorization: `Bearer ${token}` }, timeout: 5000 }
+          );
+        }
+      } catch (err) {
+        // ignore network errors; local storage still preserves changes
       }
     })();
   }, [events]);
