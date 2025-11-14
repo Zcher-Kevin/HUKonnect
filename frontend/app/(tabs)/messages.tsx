@@ -1,6 +1,17 @@
 // app/(tabs)/messages.tsx
+// Recent conversations list (bottom bar -> Messages)
+
 import React from "react";
-import { SafeAreaView, View, Text, StyleSheet, FlatList, Image, TouchableOpacity } from "react-native";
+import {
+  SafeAreaView,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  Dimensions,
+  Platform,
+} from "react-native";
 import { router } from "expo-router";
 import { useThreads } from "../lib/chatStore";
 
@@ -9,57 +20,117 @@ const TEXT = "#231F20";
 const SUB = "#7A6F6F";
 const MAROON = "#A2172C";
 
-export default function MessagesList() {
+const { width: W } = Dimensions.get("window");
+const WRAP_W = Math.min(600, W * 0.96);
+
+export default function MessagesListScreen() {
   const threads = useThreads();
+
+  const open = (peerId: string) => {
+    router.push(`/messages/${peerId}`);
+  };
 
   return (
     <SafeAreaView style={styles.screen}>
-      <Text style={styles.title}>Messages</Text>
+      <View style={[styles.inner, { width: WRAP_W }]}>
+        <Text style={styles.title}>Messages</Text>
 
-      <FlatList
-        data={threads}
-        keyExtractor={(t) => t.chatId}
-        contentContainerStyle={{ paddingBottom: 16 }}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.row}
-            activeOpacity={0.9}
-            onPress={() => router.push({ pathname: "/messages/[id]", params: { id: item.peerId } })}
-          >
-            <Image
-              source={{ uri: item.peerAvatar || "https://i.pravatar.cc/100?u=" + item.peerId }}
-              style={styles.ava}
-            />
-            <View style={{ flex: 1 }}>
-              <View style={styles.top}>
-                <Text style={styles.name} numberOfLines={1}>{item.peerName}</Text>
-                <Text style={styles.time}>{new Date(item.lastMessageAt || Date.now()).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</Text>
-              </View>
-              <Text style={styles.preview} numberOfLines={1}>{item.lastMessageText || "Start the conversation"}</Text>
-            </View>
-          </TouchableOpacity>
+        {threads.length === 0 && (
+          <Text style={styles.empty}>
+            You have no conversations yet. Start by messaging someone from
+            their profile.
+          </Text>
         )}
-        ListEmptyComponent={
-          <View style={{ padding: 16 }}>
-            <Text style={{ color: SUB }}>No conversations yet. Open a profile and tap “Message”.</Text>
-          </View>
-        }
-      />
+
+        <FlatList
+          data={threads}
+          keyExtractor={(t) => t.id}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.9}
+              onPress={() => open(item.peerId)}
+            >
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarInitial}>
+                  {item.peerName.charAt(0)}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name}>{item.peerName}</Text>
+                <Text
+                  style={styles.last}
+                  numberOfLines={1}
+                >
+                  {item.lastMessage || "Tap to continue the conversation"}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 24 }}
+        />
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: BG, padding: 16, gap: 8 },
-  title: { fontSize: 20, fontWeight: "800", color: TEXT, marginBottom: 4 },
-  row: {
-    backgroundColor: "#fff", padding: 12, borderRadius: 14, flexDirection: "row", gap: 12, alignItems: "center",
-    shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2,
-    marginBottom: 10,
+  screen: {
+    flex: 1,
+    backgroundColor: BG,
+    alignItems: "center",
+    paddingTop: Platform.select({ ios: 8, android: 8, web: 16 }),
   },
-  ava: { width: 48, height: 48, borderRadius: 24, backgroundColor: "#eee" },
-  top: { flexDirection: "row", alignItems: "center" },
-  name: { flex: 1, color: TEXT, fontWeight: "800", fontSize: 16 },
-  time: { color: SUB, fontSize: 12 },
-  preview: { color: SUB, marginTop: 2 },
+  inner: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: TEXT,
+    marginBottom: 12,
+  },
+  empty: {
+    color: SUB,
+    marginBottom: 12,
+  },
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  avatarCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FDECEF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  avatarInitial: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: MAROON,
+  },
+  name: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: TEXT,
+  },
+  last: {
+    fontSize: 12,
+    color: SUB,
+    marginTop: 2,
+  },
 });

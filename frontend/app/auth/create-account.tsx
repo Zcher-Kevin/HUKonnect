@@ -1,16 +1,20 @@
 // app/auth/create-account.tsx
+// Create account form with email + profile info.
+// Gender + Year of Study use fixed option pickers (no free text).
+// BACKEND TODO: hook onCreate into /auth/register.
+
 import React, { useState } from "react";
 import {
   SafeAreaView,
   ScrollView,
   View,
   Text,
+  ActivityIndicator,
   TextInput,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
   Platform,
-  ActivityIndicator,
   Alert,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -45,6 +49,10 @@ const SUBTEXT = "#7A6F6F";
 
 const { width: W } = Dimensions.get("window");
 const WRAP_W = Math.min(420, W * 0.92);
+const RADIUS = 20;
+
+const GENDER_OPTIONS = ["Male", "Female"];
+const YEAR_OPTIONS = ["1", "2", "3", "4", "5", "Masters", "PhD"];
 
 export default function CreateAccount() {
   const params = useLocalSearchParams();
@@ -58,6 +66,7 @@ export default function CreateAccount() {
       // ignore parse errors
     }
   }, [params]);
+  const [email, setEmail] = useState("");
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
   // Local auth fields (optional). If provided we will register using these
@@ -68,11 +77,12 @@ export default function CreateAccount() {
   const [nickname, setNickname] = useState("");
   const [major, setMajor] = useState("");
   const [minor, setMinor] = useState("");
-  const [studyYear, setStudyYear] = useState("");
   const [day, setDay] = useState("");
   const [month, setMonth] = useState("");
   const [year, setYear] = useState("");
-  const [gender, setGender] = useState("");
+  const [gender, setGender] = useState<"Male" | "Female" | "">("");
+  const [yearOfStudy, setYearOfStudy] =
+    useState<"" | (typeof YEAR_OPTIONS)[number]>("");
   const [busy, setBusy] = useState(false);
 
   /**
@@ -296,22 +306,15 @@ export default function CreateAccount() {
    * LATER: comment out the mock, then uncomment the real call.
    */
   const onCreate = async () => {
-    try {
-      setBusy(true);
-      // Call the backend to save the profile. submitProfile will throw on
-      // validation or network errors which we catch below.
-      await submitProfile();
-      // On success, navigate into the app.
-      router.replace("/(tabs)");
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      Alert.alert("Missing email", "Please enter your email.");
       return;
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Could not create your account. Please try again.";
-      Alert.alert("Create Account", msg);
-    } finally {
-      setBusy(false);
+    }
+    if (!trimmedEmail.includes("@")) {
+      Alert.alert("Check email", "Please enter a valid email address.");
+      return;
     }
   };
 
@@ -343,11 +346,10 @@ export default function CreateAccount() {
     <SafeAreaView style={styles.screen}>
       <ScrollView
         style={{ alignSelf: "stretch" }}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { width: WRAP_W }]}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.wrap}>
-          <Text style={styles.header}>Create Account</Text>
+        <Text style={styles.header}>Create Account</Text>
 
           <Text style={styles.sectionTitle}>Account</Text>
 
@@ -384,54 +386,34 @@ export default function CreateAccount() {
 
           <Text style={styles.sectionTitle}>Your Information</Text>
 
-          {/* Name row */}
-          <View style={styles.row}>
-            <TextInput
-              placeholder="First Name"
-              placeholderTextColor={SUBTEXT}
-              style={[styles.input, styles.half]}
-              value={first}
-              onChangeText={setFirst}
-              autoCapitalize="words"
-              returnKeyType="next"
-            />
-            <TextInput
-              placeholder="Last Name"
-              placeholderTextColor={SUBTEXT}
-              style={[styles.input, styles.half]}
-              value={last}
-              onChangeText={setLast}
-              autoCapitalize="words"
-              returnKeyType="next"
-            />
-          </View>
-          <View style={styles.row}>
-            <TextInput
-              placeholder="Nickname (Optional)"
-              placeholderTextColor={SUBTEXT}
-              style={[styles.input, { flex: 2 }]}
-              value={nickname}
-              onChangeText={setNickname}
-              autoCapitalize="words"
-              returnKeyType="next"
-            />
-            <TextInput
-              placeholder="Gender"
-              placeholderTextColor={SUBTEXT}
-              style={[styles.input, { flex: 1 }]}
-              value={gender}
-              onChangeText={setGender}
-              autoCapitalize="words"
-              returnKeyType="next"
-            />
-          </View>
+        {/* Email */}
+        <TextInput
+          placeholder="Email"
+          placeholderTextColor={SUBTEXT}
+          style={styles.input}
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
+
+        {/* Name row */}
+        <View style={styles.row}>
           <TextInput
-            placeholder="Major"
+            placeholder="First Name"
             placeholderTextColor={SUBTEXT}
-            style={styles.input}
-            value={major}
-            onChangeText={setMajor}
-            returnKeyType="next"
+            style={[styles.input, styles.half]}
+            value={first}
+            onChangeText={setFirst}
+            autoCapitalize="words"
+          />
+          <TextInput
+            placeholder="Surname"
+            placeholderTextColor={SUBTEXT}
+            style={[styles.input, styles.half]}
+            value={last}
+            onChangeText={setLast}
+            autoCapitalize="words"
           />
 
           <View style={styles.row}>
@@ -444,14 +426,31 @@ export default function CreateAccount() {
               returnKeyType="next"
             />
 
-            <TextInput
-              placeholder="Year of Study"
-              placeholderTextColor={SUBTEXT}
-              style={[styles.input, { flex: 1 }]}
-              value={studyYear}
-              onChangeText={setStudyYear}
-              returnKeyType="next"
-            />
+            {/* Year of study */}
+            <Text style={styles.label}>Year of Study</Text>
+            <View style={styles.chipRowWrap}>
+              {YEAR_OPTIONS.map((y) => (
+                <TouchableOpacity
+                  key={y}
+                  style={[
+                    styles.chip,
+                    yearOfStudy === y && styles.chipActive,
+                  ]}
+                  onPress={() =>
+                    setYearOfStudy((prev) => (prev === y ? "" : y))
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      yearOfStudy === y && styles.chipTextActive,
+                    ]}
+                  >
+                    {y}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           {/* Age split into Day / Month / Year */}
@@ -535,44 +534,116 @@ export default function CreateAccount() {
             By creating an account, you agree to our Terms and{"\n"}Conditions.
           </Text>
         </View>
+
+        <TextInput
+          placeholder="Major"
+          placeholderTextColor={SUBTEXT}
+          style={styles.input}
+          value={major}
+          onChangeText={setMajor}
+        />
+
+        <TextInput
+          placeholder="Minor"
+          placeholderTextColor={SUBTEXT}
+          style={styles.input}
+          value={minor}
+          onChangeText={setMinor}
+        />
+
+        {/* DOB */}
+        <Text style={styles.label}>Date of Birth</Text>
+        <View style={styles.row}>
+          <TextInput
+            placeholder="DD"
+            placeholderTextColor={SUBTEXT}
+            style={[styles.input, styles.third]}
+            keyboardType="number-pad"
+            maxLength={2}
+            value={day}
+            onChangeText={(t) => setDay(t.replace(/[^0-9]/g, ""))}
+          />
+          <TextInput
+            placeholder="MM"
+            placeholderTextColor={SUBTEXT}
+            style={[styles.input, styles.third]}
+            keyboardType="number-pad"
+            maxLength={2}
+            value={month}
+            onChangeText={(t) => setMonth(t.replace(/[^0-9]/g, ""))}
+          />
+          <TextInput
+            placeholder="YYYY"
+            placeholderTextColor={SUBTEXT}
+            style={[styles.input, styles.third]}
+            keyboardType="number-pad"
+            maxLength={4}
+            value={year}
+            onChangeText={(t) => setYear(t.replace(/[^0-9]/g, ""))}
+          />
+        </View>
+
+        {/* Gender */}
+        <Text style={styles.label}>Gender</Text>
+        <View style={styles.chipRow}>
+          {GENDER_OPTIONS.map((g) => (
+            <TouchableOpacity
+              key={g}
+              style={[
+                styles.chip,
+                gender === g && styles.chipActive,
+              ]}
+              onPress={() =>
+                setGender((prev) => (prev === g ? "" : (g as any)))
+              }
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  gender === g && styles.chipTextActive,
+                ]}
+              >
+                {g}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TouchableOpacity
+          style={[styles.btn, { width: WRAP_W }]}
+          activeOpacity={0.9}
+          onPress={onCreate}
+        >
+          <Text style={styles.btnText}>Create Account</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.terms}>
+          By creating an account, you agree to our Terms and{"\n"}Conditions.
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const RADIUS = 20;
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    flexDirection: "column",
-    justifyContent: "flex-start",
     backgroundColor: BG,
-    paddingTop: Platform.select({ ios: 12, android: 12, web: 24 }),
-  },
-
-  // ensure children are centered horizontally inside the content area
-  content: {
-    alignContent: "center",
     alignItems: "center",
+    paddingTop: Platform.select({ ios: 8, android: 8, web: 24 }),
+  },
+  content: {
+    alignItems: "stretch",
+    gap: 12,
     paddingBottom: 24,
   },
-
-  // Fixed-width wrapper for the centered column
-  wrap: {
-    width: "90%",
-    alignSelf: "center",
-    gap: 12,
-  },
-
   header: {
     alignSelf: "center",
-    fontWeight: "700",
     fontSize: 18,
+    fontWeight: "700",
     color: TEXT,
     marginBottom: 6,
   },
-
   sectionTitle: {
     fontSize: 22,
     fontWeight: "800",
@@ -584,7 +655,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: SUBTEXT,
     marginTop: 6,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   row: {
     flexDirection: "row",
@@ -602,28 +673,53 @@ const styles = StyleSheet.create({
   half: {
     flexBasis: "48%",
   },
-
   third: {
-    width: "30%",
-    flexBasis: "40%",
+    flexBasis: (WRAP_W - 24) / 3,
     flexGrow: 0,
   },
-
-  // Increased horizontal size for the main button.
-  // Using WRAP_W here makes the style adapt to the same base width used elsewhere;
-  // adjust the multiplier to make it wider as needed.
+  chipRow: {
+    flexDirection: "row",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  chipRowWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    backgroundColor: "#fff",
+  },
+  chipActive: {
+    backgroundColor: MAROON,
+    borderColor: MAROON,
+  },
+  chipText: {
+    fontSize: 14,
+    color: TEXT,
+    fontWeight: "500",
+  },
+  chipTextActive: {
+    color: "#fff",
+    fontWeight: "700",
+  },
   btn: {
     backgroundColor: MAROON,
     paddingVertical: 16,
-    borderRadius: 100,
+    borderRadius: 999,
     alignItems: "center",
     marginTop: 8,
-    width: WRAP_W * 1.5, // increased width (50% larger)
-    alignSelf: "center",
-    maxWidth: "100%",
   },
-  btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-
+  btnText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
   terms: {
     color: SUBTEXT,
     textAlign: "center",

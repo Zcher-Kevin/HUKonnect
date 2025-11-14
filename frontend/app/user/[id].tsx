@@ -1,247 +1,504 @@
 // app/user/[id].tsx
-import React, { useMemo } from "react";
+
+import React, { useMemo, useState } from "react";
 import {
-    SafeAreaView,
-    View,
-    Text,
-    StyleSheet,
-    Image,
-    TouchableOpacity,
-    ScrollView,
-    Dimensions,
+  SafeAreaView,
+  ScrollView,
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+  Dimensions,
+  Platform,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  getPerson,
+  useStoreVersion,
+  Person,
+  isFollowing,
+  toggleFollow,
+  CURRENT_USER_ID,
+} from "../lib/followStore";
+import { chat, ME_ID } from "../lib/chatStore";
 
 const BG = "#FFF7F7";
 const TEXT = "#231F20";
 const SUB = "#7A6F6F";
 const MAROON = "#A2172C";
-const CARD = "#fff";
+const CARD = "#FFFFFF";
 
 const { width: W } = Dimensions.get("window");
 const WRAP_W = Math.min(420, W * 0.92);
 
-// Mock directory (keep in sync with app/(tabs)/events.tsx)
-const PEOPLE: Record<
-    string,
-    {
-        id: string;
-        name: string;
-        major: string;
-        bio: string;
-        avatar: string;
-        followers: number;
-        following: number;
-        events: { title: string; color: string; start: number; end: number; dayIdx: number }[];
-    }
-> = {
-    charlotte: {
-        id: "charlotte",
-        name: "Charlotte Chan",
-        major: "Computer Science",
-        bio: "Passionate about AI and machine learning.",
-        avatar: "https://i.pravatar.cc/300?img=5",
-        followers: 120,
-        following: 75,
-        events: [
-            { title: "Physics Lecture", color: "#B2F2E8", start: 9 * 60, end: 10 * 60, dayIdx: 0 },
-            { title: "Math Class", color: "#E5C6FF", start: 14 * 60, end: 15 * 60, dayIdx: 0 },
-            { title: "Group Study", color: "#B2F2E8", start: 10 * 60, end: 11 * 60, dayIdx: 2 },
-            { title: "Art Workshop", color: "#CFE2FF", start: 18 * 60, end: 19 * 60, dayIdx: 4 },
-        ],
-    },
-    sam: {
-        id: "sam",
-        name: "Sam Patel",
-        major: "Physics",
-        bio: "Quantum enjoyer. Basketball on Thursdays.",
-        avatar: "https://i.pravatar.cc/300?img=11",
-        followers: 88,
-        following: 41,
-        events: [{ title: "Quantum Seminar", color: "#CFE2FF", start: 11 * 60, end: 12 * 60, dayIdx: 2 }],
-    },
-    muller: {
-        id: "muller",
-        name: "Lena Muller",
-        major: "Chemistry",
-        bio: "Organic chemistry lab assistant.",
-        avatar: "https://i.pravatar.cc/300?img=32",
-        followers: 64,
-        following: 28,
-        events: [{ title: "Chem Lab", color: "#FFD6A5", start: 16 * 60, end: 17 * 60, dayIdx: 1 }],
-    },
-};
-
-/* BACKEND NOTES (concise)
-  GET /people/:id                          → { id, name, major, bio, avatarUrl, followers, following, scheduleVisible }
-  GET /people/:id/schedule?preview=true    → Event[]
-  When wired, replace PEOPLE[...] with fetched data and handle scheduleVisible=false by hiding the preview.
-*/
-
 const START_HOUR = 7;
 const END_HOUR = 20;
-const H = 44; // preview row height
+const ROW_H = 40;
+const DAYS = ["Thu", "Fri", "Sat", "Sun", "Mon"];
 
-export default function UserProfile() {
-    const params = useLocalSearchParams<{ id?: string }>();
-    const routeId = params.id || "charlotte";
-    const person = PEOPLE[routeId] || {
-        id: "unknown",
-        name: "Student",
-        major: "Unknown",
-        bio: "—",
-        avatar: "https://i.pravatar.cc/300?u=unknown",
-        followers: 0,
-        following: 0,
-        events: [],
-    };
+type EventItem = {
+  title: string;
+  color: string;
+  startMins: number;
+  endMins: number;
+  dayIdx: number;
+};
 
-    // Show 5 preview columns (example labels only)
-    const days = useMemo(() => Array.from({ length: 5 }, (_, i) => i), []);
-    const times = useMemo(
-        () => Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i),
-        []
-    );
+const DUMMY_EVENTS: Record<string, EventItem[]> = {
+  charlotte: [
+    { title: "Physics Lecture", color: "#CFE2FF", startMins: 9 * 60, endMins: 10 * 60, dayIdx: 0 },
+    { title: "Group Study", color: "#B2F2E8", startMins: 11 * 60, endMins: 12 * 60, dayIdx: 0 },
+    { title: "Free Slot", color: "#F4ECFF", startMins: 14 * 60, endMins: 15 * 60, dayIdx: 0 },
+    { title: "Math Class", color: "#CFE2FF", startMins: 16 * 60, endMins: 17 * 60, dayIdx: 0 },
+    { title: "Art Workshop", color: "#FFD6A5", startMins: 18 * 60, endMins: 19 * 60, dayIdx: 2 },
+  ],
+  "sam-patel": [
+    { title: "Quantum Seminar", color: "#CFE2FF", startMins: 11 * 60, endMins: 12 * 60, dayIdx: 1 },
+    { title: "Basketball Practice", color: "#FFADAD", startMins: 17 * 60, endMins: 18 * 60, dayIdx: 3 },
+  ],
+  "sam-hitchens": [
+    { title: "History Reading Group", color: "#E5C6FF", startMins: 10 * 60, endMins: 11 * 60 + 30, dayIdx: 0 },
+    { title: "Study Session", color: "#B2F2E8", startMins: 15 * 60, endMins: 16 * 60, dayIdx: 2 },
+  ],
+  muller: [
+    { title: "Chemistry Lab", color: "#FFD6A5", startMins: 13 * 60, endMins: 15 * 60, dayIdx: 0 },
+    { title: "Study Group", color: "#B2F2E8", startMins: 10 * 60, endMins: 11 * 60, dayIdx: 2 },
+  ],
+};
 
-    const eventsForDay = (idx: number) => (person.events || []).filter((e) => e.dayIdx === idx);
+const minsToLabel = (m: number) => {
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = ((h + 11) % 12) + 1;
+  const mmStr = mm.toString().padStart(2, "0");
+  return `${h12}:${mmStr} ${ampm}`;
+};
 
-    return (
-        <SafeAreaView style={styles.screen}>
-            <ScrollView contentContainerStyle={{ alignItems: "center", paddingBottom: 24 }}>
-                <View style={[styles.headerWrap, { width: WRAP_W }]}>
-                    <Text style={styles.pageTitle}>Student Profile</Text>
+export default function UserProfileScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
 
-                    <Image source={{ uri: person.avatar }} style={styles.avatar} />
+  useStoreVersion();
 
-                    <Text style={styles.name}>{person.name}</Text>
-                    <Text style={styles.sub}>{`Major: ${person.major}\nBio: ${person.bio}`}</Text>
-                    <Text style={styles.meta}>
-                        {person.followers} Followers{"  "} {person.following} Following
-                    </Text>
+  const person: Person | null = useMemo(() => {
+    if (!id) return null;
+    return getPerson(id) ?? null;
+  }, [id]);
 
-                    <TouchableOpacity style={styles.followBtn} activeOpacity={0.9}>
-                        <Text style={styles.followText}>Follow</Text>
-                    </TouchableOpacity>
+  const displayName = person?.name || "Student";
+  const events: EventItem[] = person ? DUMMY_EVENTS[person.id] || [] : [];
+  const showSchedule = person?.scheduleVisible ?? true;
+
+  const isMe = person?.id === CURRENT_USER_ID;
+  const following = person ? isFollowing(person.id) : false;
+  const canFollow = !!person && !isMe;
+
+  const [selected, setSelected] = useState<EventItem | null>(null);
+
+  const eventsForDay = (dayIdx: number): EventItem[] =>
+    events.filter((e) => e.dayIdx === dayIdx);
+
+  const handleMessage = () => {
+    if (!person) return;
+    router.push(`/messages/${person.id}`);
+  };
+
+  // Invite flow: uses selected slot if present, otherwise generic.
+  const handleInvite = () => {
+    if (!person) return;
+
+    let body: string;
+
+    // NOTE FRONTEND-ONLY:
+    // Replace "another student" with actual sender name once you have auth.
+    const senderName = "another student";
+
+    if (selected) {
+      const dayName = DAYS[selected.dayIdx];
+      const start = minsToLabel(selected.startMins);
+      const end = minsToLabel(selected.endMins);
+      body =
+        `Hi ${person.name}, my name is ${senderName}. ` +
+        `I saw your schedule and would love to set up a study session ` +
+        `on ${dayName} between ${start} and ${end}. ` +
+        `Let me know if that works for you 🙂`;
+    } else {
+      body =
+        `Hi ${person.name}, my name is ${senderName}. ` +
+        `I'd like to invite you to a study session sometime soon. ` +
+        `Let me know what works for you 🙂`;
+    }
+
+    chat.send(person.id, person.name, body);
+    router.push(`/messages/${person.id}`);
+  };
+
+  const handleToggleFollow = () => {
+    if (!person || isMe) return;
+    toggleFollow(person.id); // BACKEND/TODO: follow/unfollow endpoint
+  };
+
+  const isSelected = (e: EventItem) =>
+    selected &&
+    selected.dayIdx === e.dayIdx &&
+    selected.startMins === e.startMins &&
+    selected.endMins === e.endMins &&
+    selected.title === e.title;
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <ScrollView
+        contentContainerStyle={{ alignItems: "center", paddingBottom: 24 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={[styles.headerRow, { width: WRAP_W }]}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="chevron-back" size={22} color={TEXT} />
+          </TouchableOpacity>
+          <Text style={styles.pageTitle}>Student Profile</Text>
+          <View style={{ width: 30 }} />
+        </View>
+
+        {/* Profile info */}
+        <View style={[styles.headerWrap, { width: WRAP_W }]}>
+          {person?.avatar ? (
+            <Image source={{ uri: person.avatar }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarPlaceholder]}>
+              <Text style={styles.avatarInitial}>
+                {displayName.charAt(0)}
+              </Text>
+            </View>
+          )}
+
+          <Text style={styles.name}>{displayName}</Text>
+
+          <Text style={styles.sub}>
+            {person?.major ? `Major: ${person.major}` : "Major: —"}
+            {person?.bio ? `\n${person.bio}` : ""}
+          </Text>
+
+          <Text style={styles.meta}>
+            {(person?.followers ?? 0)} Followers   {(person?.following ?? 0)} Following
+          </Text>
+
+          {canFollow && (
+            <TouchableOpacity
+              style={[
+                styles.followBtn,
+                following && styles.followBtnActive,
+              ]}
+              onPress={handleToggleFollow}
+              activeOpacity={0.9}
+            >
+              <Text
+                style={[
+                  styles.followText,
+                  following && styles.followTextActive,
+                ]}
+              >
+                {following ? "Unfollow" : "Follow"}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Schedule or hidden */}
+        {showSchedule ? (
+          <View style={[styles.previewCard, { width: WRAP_W }]}>
+            <View style={styles.daysHeader}>
+              {DAYS.map((d) => (
+                <Text key={d} style={styles.dayLabel}>
+                  {d}
+                </Text>
+              ))}
+            </View>
+
+            <View style={{ flexDirection: "row" }}>
+              {DAYS.map((_, dayIdx) => (
+                <View key={dayIdx} style={styles.col}>
+                  <View
+                    style={{
+                      position: "relative",
+                      height: (END_HOUR - START_HOUR) * ROW_H,
+                    }}
+                  >
+                    {Array.from(
+                      { length: END_HOUR - START_HOUR + 1 },
+                      (_, i) => START_HOUR + i
+                    ).map((h, idx) => (
+                      <View
+                        key={h}
+                        style={[
+                          styles.row,
+                          idx % 2 === 0 && styles.altRow,
+                        ]}
+                      >
+                        {dayIdx === 0 && (
+                          <Text style={styles.timeLabel}>
+                            {h <= 12 ? `${h} AM` : `${h - 12} PM`}
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+
+                    {eventsForDay(dayIdx).map((e, i) => {
+                      const top =
+                        ((e.startMins / 60) - START_HOUR) * ROW_H;
+                      const height =
+                        ((e.endMins - e.startMins) / 60) * ROW_H;
+                      const selectedStyle = isSelected(e)
+                        ? styles.eventBlockSelected
+                        : null;
+
+                      return (
+                        <TouchableOpacity
+                          key={i}
+                          activeOpacity={0.8}
+                          onPress={() =>
+                            setSelected(
+                              isSelected(e) ? null : e
+                            )
+                          }
+                          style={[
+                            styles.eventBlock,
+                            {
+                              top,
+                              height,
+                              backgroundColor: e.color,
+                            },
+                            selectedStyle,
+                          ]}
+                        >
+                          <Text
+                            style={styles.eventTitle}
+                            numberOfLines={2}
+                          >
+                            {e.title}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
+              ))}
+            </View>
 
-                {/* Schedule preview */}
-                <View style={[styles.previewCard, { width: WRAP_W }]}>
-                    <View style={styles.daysHeader}>
-                        {["Thu", "Fri", "Sat", "Sun", "Mon"].map((d, i) => (
-                            <View key={d} style={[styles.dayHead, i === 0 && styles.today]}>
-                                <Text style={[styles.dayText, i === 0 && styles.todayText]}>{d}</Text>
-                            </View>
-                        ))}
-                    </View>
+            {selected && (
+              <Text style={styles.selectedHint}>
+                Selected slot: {DAYS[selected.dayIdx]}{" "}
+                {minsToLabel(selected.startMins)} –{" "}
+                {minsToLabel(selected.endMins)}
+              </Text>
+            )}
+          </View>
+        ) : (
+          <View style={[styles.previewCard, { width: WRAP_W }]}>
+            <Text style={styles.hiddenTitle}>Schedule hidden</Text>
+            <Text style={styles.hiddenText}>
+              This student has chosen not to display their schedule.
+            </Text>
+          </View>
+        )}
 
-                    <View style={{ flexDirection: "row" }}>
-                        {days.map((idx) => (
-                            <View key={idx} style={styles.col}>
-                                <View style={{ position: "relative", height: (END_HOUR - START_HOUR) * H }}>
-                                    {times.map((t, i) => (
-                                        <View key={t} style={[styles.row, i % 2 === 0 && styles.alt]} />
-                                    ))}
-                                    {eventsForDay(idx).map((e, k) => {
-                                        const top = ((e.start - START_HOUR * 60) / 60) * H;
-                                        const height = ((e.end - e.start) / 60) * H;
-                                        return (
-                                            <View
-                                                key={k}
-                                                style={[styles.block, { top, height, backgroundColor: e.color }]}
-                                            >
-                                                <Text style={styles.blockTitle} numberOfLines={1}>
-                                                    {e.title}
-                                                </Text>
-                                            </View>
-                                        );
-                                    })}
-                                </View>
-                            </View>
-                        ))}
-                    </View>
-                </View>
+        {/* Actions */}
+        <TouchableOpacity
+          style={[styles.primaryBtn, { width: WRAP_W }]}
+          activeOpacity={0.9}
+          onPress={handleMessage}
+        >
+          <Text style={styles.primaryBtnText}>Message</Text>
+        </TouchableOpacity>
 
-                <TouchableOpacity
-                    style={[styles.cta, { width: WRAP_W }]}
-                    activeOpacity={0.9}
-                    onPress={() => router.push({ pathname: "/user/[id]/schedule", params: { id: person.id } })}
-                >
-                    <Text style={styles.ctaText}>View Full Schedule</Text>
-                </TouchableOpacity>
-
-
-                {/* Message → open 1:1 chat for this user */}
-                <TouchableOpacity
-                    style={[styles.ghost, { width: WRAP_W }]}
-                    activeOpacity={0.9}
-                    onPress={() => router.push({ pathname: "/messages/[id]", params: { id: person.id } })}
-                >
-                    <Text style={styles.ghostText}>Message</Text>
-                </TouchableOpacity>
-            </ScrollView>
-        </SafeAreaView>
-    );
+        <TouchableOpacity
+          style={[styles.ghostBtn, { width: WRAP_W }]}
+          activeOpacity={0.9}
+          onPress={handleInvite}
+        >
+          <Text style={styles.ghostBtnText}>
+            Invite to study session
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
-    screen: { flex: 1, backgroundColor: BG },
-    headerWrap: { alignItems: "center", gap: 8, paddingTop: 10, paddingBottom: 8 },
-    pageTitle: { fontSize: 18, fontWeight: "800", color: TEXT, alignSelf: "flex-start" },
-    avatar: { width: 120, height: 120, borderRadius: 60, marginTop: 8, backgroundColor: "#eee" },
-    name: { fontSize: 18, fontWeight: "800", color: TEXT, marginTop: 8 },
-    sub: { color: SUB, textAlign: "center", marginTop: 4 },
-    meta: { color: SUB, marginTop: 4 },
-
-    followBtn: {
-        marginTop: 10,
-        backgroundColor: MAROON,
-        borderRadius: 999,
-        paddingVertical: 12,
-        paddingHorizontal: 28,
-    },
-    followText: { color: "#fff", fontWeight: "700" },
-
-    previewCard: {
-        backgroundColor: CARD,
-        borderRadius: 16,
-        padding: 12,
-        marginTop: 12,
-        shadowColor: "#000",
-        shadowOpacity: 0.06,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 4 },
-        elevation: 2,
-    },
-    daysHeader: { flexDirection: "row", gap: 8, marginBottom: 8 },
-    dayHead: { backgroundColor: "#F4F6FF", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
-    today: { backgroundColor: "#EAE6F0" },
-    dayText: { fontWeight: "800", color: TEXT },
-    todayText: { color: MAROON },
-
-    col: { width: (WRAP_W - 24) / 5, marginHorizontal: 2 },
-    row: { height: H, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#eee" },
-    alt: { backgroundColor: "#FAFAFA" },
-
-    block: { position: "absolute", left: 4, right: 4, borderRadius: 10, padding: 6 },
-    blockTitle: { fontSize: 11, fontWeight: "700", color: "#1d1d1f" },
-
-    cta: {
-        marginTop: 12,
-        backgroundColor: MAROON,
-        borderRadius: 999,
-        paddingVertical: 14,
-        alignItems: "center",
-    },
-    ctaText: { color: "#fff", fontWeight: "700" },
-
-    ghost: {
-        marginTop: 10,
-        backgroundColor: "#fff",
-        borderRadius: 999,
-        paddingVertical: 14,
-        alignItems: "center",
-        borderWidth: 2,
-        borderColor: "#E6E6E6",
-    },
-    ghostText: { color: TEXT, fontWeight: "700" },
+  screen: {
+    flex: 1,
+    backgroundColor: BG,
+    paddingTop: Platform.select({ ios: 8, android: 8, web: 24 }),
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    marginBottom: 4,
+  },
+  backBtn: {
+    paddingVertical: 4,
+    paddingRight: 4,
+  },
+  pageTitle: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 18,
+    fontWeight: "800",
+    color: TEXT,
+  },
+  headerWrap: {
+    alignItems: "center",
+    gap: 8,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  avatar: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    marginTop: 4,
+    backgroundColor: "#eee",
+  },
+  avatarPlaceholder: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarInitial: {
+    fontSize: 40,
+    fontWeight: "800",
+    color: MAROON,
+  },
+  name: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: TEXT,
+    marginTop: 4,
+  },
+  sub: {
+    color: SUB,
+    textAlign: "center",
+    marginTop: 4,
+  },
+  meta: {
+    color: SUB,
+    marginTop: 4,
+  },
+  followBtn: {
+    marginTop: 8,
+    paddingHorizontal: 26,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: MAROON,
+    backgroundColor: "#fff",
+  },
+  followBtnActive: {
+    backgroundColor: MAROON,
+  },
+  followText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: MAROON,
+  },
+  followTextActive: {
+    color: "#fff",
+  },
+  previewCard: {
+    backgroundColor: CARD,
+    borderRadius: 16,
+    padding: 12,
+    marginTop: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  daysHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  dayLabel: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 11,
+    fontWeight: "700",
+    color: TEXT,
+  },
+  col: {
+    flex: 1,
+    marginHorizontal: 1,
+  },
+  row: {
+    height: ROW_H,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#eee",
+    justifyContent: "flex-start",
+    paddingLeft: 2,
+  },
+  altRow: {
+    backgroundColor: "#FAFAFA",
+  },
+  timeLabel: {
+    fontSize: 8,
+    color: SUB,
+  },
+  eventBlock: {
+    position: "absolute",
+    left: 3,
+    right: 3,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  eventTitle: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#1d1d1f",
+  },
+  hiddenTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: TEXT,
+    marginBottom: 4,
+  },
+  hiddenText: {
+    fontSize: 13,
+    color: SUB,
+  },
+  primaryBtn: {
+    marginTop: 12,
+    backgroundColor: MAROON,
+    borderRadius: 999,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  primaryBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 16,
+  },
+  ghostBtn: {
+    marginTop: 8,
+    backgroundColor: "#fff",
+    borderRadius: 999,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
+  },
+  ghostBtnText: {
+    color: TEXT,
+    fontWeight: "700",
+    fontSize: 16,
+  },
 });

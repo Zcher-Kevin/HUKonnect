@@ -1,11 +1,21 @@
 // app/lib/chatStore.ts
-import { useSyncExternalStore } from "react";
+// Tiny in-memory chat store used by:
+// - (tabs)/messages.tsx  (thread list)
+// - messages/[id].tsx    (DM view)
+// - user/[id].tsx        (sending invites)
+//
+// BACKEND NOTES:
+// Replace internals with real API calls, but keep the public functions
+// so the frontend does not need to change.
+
+import { useEffect, useState } from "react";
+
+export const ME_ID = "u_me"; // placeholder current-user id
 
 export type Message = {
   id: string;
-  chatId: string;       // "dm:<userId>"
-  peerId: string;
-  senderId: string;     // "u_me" or peerId
+  chatId: string;
+  senderId: string;
   text: string;
   createdAt: number;
   editedAt?: number;
@@ -13,129 +23,151 @@ export type Message = {
 };
 
 export type Thread = {
-  chatId: string;       // "dm:<userId>"
+  id: string;        // chatId, e.g. "dm:sam-patel"
   peerId: string;
   peerName: string;
-  peerAvatar?: string | null;
-  lastMessageAt: number;
-  lastMessageText: string;
-  unread: number;
+  lastMessage?: string;
+  updatedAt: number;
 };
 
-const ME = "u_me";
-
-// ---- single stable state object (important!) ----
-const state = {
-  threads: new Map<string, Thread>(),
-  messages: new Map<string, Message[]>(),
+type Store = {
+  messagesByChat: Record<string, Message[]>;
+  threads: Record<string, Thread>;
 };
-const subs = new Set<() => void>();
-const emit = () => subs.forEach((fn) => fn());
+
+const store: Store = {
+  messagesByChat: {},
+  threads: {},
+};
+
+let version = 0;
+const subs = new Set<(v: number) => void>();
+
+function emit() {
+  version += 1;
+  subs.forEach((fn) => fn(version));
+}
+
+function ensureThread(peerId: string, peerName: string): Thread {
+  const chatId = `dm:${peerId}`;
+  const existing = store.threads[chatId];
+  if (existing) {
+    // Keep latest name
+    if (existing.peerName !== peerName) existing.peerName = peerName;
+    return existing;
+  }
+  const thread: Thread = {
+    id: chatId,
+    peerId,
+    peerName,
+    updatedAt: Date.now(),
+  };
+  store.threads[chatId] = thread;
+  if (!store.messagesByChat[chatId]) store.messagesByChat[chatId] = [];
+  return thread;
+}
+
+function upsertThreadFromMessage(msg: Message, peerId: string, peerName: string) {
+  const chatId = msg.chatId;
+  const thread = store.threads[chatId] ?? {
+    id: chatId,
+    peerId,
+    peerName,
+    updatedAt: msg.createdAt,
+  };
+  thread.lastMessage = msg.text;
+  thread.updatedAt = msg.createdAt;
+  store.threads[chatId] = thread;
+}
+
+// PUBLIC CHAT API
 
 export const chat = {
-  // React subscription
-  subscribe(fn: () => void) {
-    subs.add(fn);
-    return () => subs.delete(fn);
-  },
-  // MUST return a stable reference, not a new object each time
-  getSnapshot() {
-    return state;
+  ensureThread(peerId: string, peerName: string): Thread {
+    return ensureThread(peerId, peerName);
   },
 
-  // ----- queries -----
-  listThreads(): Thread[] {
-    return [...state.threads.values()].sort((a, b) => b.lastMessageAt - a.lastMessageAt);
-  },
-  getMessages(chatId: string): Message[] {
-    return (state.messages.get(chatId) || []).slice().sort((a, b) => a.createdAt - b.createdAt);
-  },
-
-  // ----- mutations -----
-  ensureThread(peerId: string, peerName: string, peerAvatar?: string | null) {
+  send(
+    peerId: string,
+    peerName: string,
+    text: string,
+    opts?: { replyToId?: string }
+  ): Message {
     const chatId = `dm:${peerId}`;
-    let created = false;
-    if (!state.threads.has(chatId)) {
-      state.threads.set(chatId, {
-        chatId,
-        peerId,
-        peerName,
-        peerAvatar: peerAvatar || null,
-        lastMessageAt: 0,
-        lastMessageText: "",
-        unread: 0,
-      });
-      created = true;
-    }
-    if (!state.messages.has(chatId)) {
-      state.messages.set(chatId, []);
-      created = true;
-    }
-    if (created) emit();
-    return chatId;
-  },
+    ensureThread(peerId, peerName);
 
-  send(peerId: string, peerName: string, text: string, opts?: { replyToId?: string }) {
-    const chatId = this.ensureThread(peerId, peerName);
     const msg: Message = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
       chatId,
-      peerId,
-      senderId: ME,
+      senderId: ME_ID,
       text,
       createdAt: Date.now(),
-      replyToId: opts?.replyToId,
+      ...(opts?.replyToId && { replyToId: opts.replyToId }),
     };
-    state.messages.get(chatId)!.push(msg);
-    const th = state.threads.get(chatId)!;
-    th.lastMessageAt = msg.createdAt;
-    th.lastMessageText = text;
+
+    if (!store.messagesByChat[chatId]) store.messagesByChat[chatId] = [];
+    store.messagesByChat[chatId].push(msg);
+    upsertThreadFromMessage(msg, peerId, peerName);
+
+    // BACKEND TODO: POST /chats/{peerId}/messages { text, replyToId }
     emit();
     return msg;
   },
 
-  edit(chatId: string, id: string, newText: string) {
-    const arr = state.messages.get(chatId) || [];
-    const m = arr.find((x) => x.id === id);
+  edit(chatId: string, messageId: string, newText: string) {
+    const msgs = store.messagesByChat[chatId];
+    if (!msgs) return;
+    const m = msgs.find((x) => x.id === messageId);
     if (!m) return;
     m.text = newText;
     m.editedAt = Date.now();
-    if (arr[arr.length - 1]?.id === id) {
-      const th = state.threads.get(chatId);
-      if (th) th.lastMessageText = newText;
-    }
+    // BACKEND TODO: PATCH /messages/{id} { text }
     emit();
   },
 
-  remove(chatId: string, id: string) {
-    const arr = state.messages.get(chatId) || [];
-    const idx = arr.findIndex((x) => x.id === id);
-    if (idx >= 0) arr.splice(idx, 1);
-    const last = arr[arr.length - 1];
-    const th = state.threads.get(chatId);
-    if (th) {
-      th.lastMessageAt = last?.createdAt || 0;
-      th.lastMessageText = last?.text || "";
-    }
+  remove(chatId: string, messageId: string) {
+    const msgs = store.messagesByChat[chatId];
+    if (!msgs) return;
+    const idx = msgs.findIndex((x) => x.id === messageId);
+    if (idx === -1) return;
+    msgs.splice(idx, 1);
+    // BACKEND TODO: DELETE /messages/{id}
     emit();
+  },
+
+  getMessages(chatId: string): Message[] {
+    return store.messagesByChat[chatId] ?? [];
+  },
+
+  getThreads(): Thread[] {
+    return Object.values(store.threads).sort(
+      (a, b) => b.updatedAt - a.updatedAt
+    );
   },
 };
 
-// Hooks
-export function useThreads() {
-  useSyncExternalStore(chat.subscribe, chat.getSnapshot, chat.getSnapshot);
-  return chat.listThreads();
-}
-export function useMessages(chatId: string) {
-  useSyncExternalStore(chat.subscribe, chat.getSnapshot, chat.getSnapshot);
+// HOOKS
+
+export function useMessages(chatId: string): Message[] {
+  const [v, setV] = useState(version);
+  useEffect(() => {
+    const fn = (nv: number) => setV(nv);
+    subs.add(fn);
+    return () => subs.delete(fn);
+  }, []);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _ = v; // just to subscribe
   return chat.getMessages(chatId);
 }
 
-/* BACKEND (concise):
-  GET /chats                      → Thread[]
-  GET /chats/dm/:peerId           → { thread, messages }
-  POST /chats/dm/:peerId/messages { text, replyToId? } → Message
-  PATCH /chats/:chatId/messages/:id { text }          → Message (editedAt)
-  DELETE /chats/:chatId/messages/:id
-  Auth: Bearer <JWT>
-*/
+export function useThreads(): Thread[] {
+  const [v, setV] = useState(version);
+  useEffect(() => {
+    const fn = (nv: number) => setV(nv);
+    subs.add(fn);
+    return () => subs.delete(fn);
+  }, []);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _ = v;
+  return chat.getThreads();
+}
