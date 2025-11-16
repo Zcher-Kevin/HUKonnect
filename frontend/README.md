@@ -1,5 +1,11 @@
 # HUKonnect Frontend
 
+> Note: this repository keeps a managed Expo workflow by default. The
+> `ios/` (and `android/`) native directories are intentionally ignored and
+> removed from source control to avoid local native-only edits. To run or
+> build for iOS use Expo Go on a physical device or create an EAS development
+> build; see the "Running the App" section below for commands and options.
+
 React Native mobile application built with Expo for the HUKonnect campus connection platform.
 
 ## 🚀 Tech Stack
@@ -82,6 +88,14 @@ npm run ios
 # Scan QR code with Camera app
 ```
 
+If you removed the `ios/` folder (managed workflow) and want to run locally
+on the iOS simulator you'll need to either:
+
+- use Expo Go on a physical device (recommended for quick iteration), or
+- generate a local or cloud development build with EAS (`eas build --platform ios --profile development`) which will create a matching binary that registers native modules.
+
+See the "Building for Production" section for more details on EAS.
+
 ### Android
 
 ```bash
@@ -125,8 +139,8 @@ const getApiUrl = () => {
 - `POST /api/auth/login` - User authentication
 - `POST /api/auth/register` - User registration
 - `GET /api/users/profile` - User profile
-- `GET /api/groups` - Study groups
-- `GET /api/events` - Campus events
+- `GET /api/groups` - (removed)
+<!-- Events feature removed -->
 
 ## 🧩 Key Features
 

@@ -1,21 +1,25 @@
+// app/_layout.tsx
 import { Stack } from "expo-router";
-import { useEffect } from "react";
-import * as SplashScreen from "expo-splash-screen";
-import "react-native-reanimated";
+// Setup axios logging early so requests/responses are visible in Metro logs
+import setupAxiosLogging from "./lib/axiosSetup";
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+setupAxiosLogging();
 
 export default function RootLayout() {
-  useEffect(() => {
-    // Hide splash screen after component mounts
-    SplashScreen.hideAsync();
-  }, []);
-
   return (
-    <Stack>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    <Stack
+      initialRouteName="index"
+      screenOptions={{ headerShown: false, contentStyle: { paddingTop: 12 } }}
+    >
+      <Stack.Screen name="user/[id]" /> {/* Profile detail (no bottom bar) */}
+      <Stack.Screen name="index" /> {/* Welcome */}
+      <Stack.Screen name="auth/login" /> {/* Google login */}
+      <Stack.Screen name="auth/create-account" /> {/* Create account */}
+      <Stack.Screen name="(tabs)" /> {/* existing app tabs */}
       <Stack.Screen name="+not-found" />
+      <Stack.Screen name="messages/[id]" /> {/* DM chat */}
+      <Stack.Screen name="user/[id]/schedule" />{" "}
+      {/* Profile → View Full Schedule */}
     </Stack>
   );
 }
