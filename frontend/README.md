@@ -139,8 +139,8 @@ const getApiUrl = () => {
 - `POST /api/auth/login` - User authentication
 - `POST /api/auth/register` - User registration
 - `GET /api/users/profile` - User profile
-- `GET /api/groups` - Study groups
-- `GET /api/events` - Campus events
+- `GET /api/groups` - (removed)
+<!-- Events feature removed -->
 
 ## 🧩 Key Features
 

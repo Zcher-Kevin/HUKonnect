@@ -208,32 +208,20 @@ npm start
 - `GET /api/users/search` - Search users (requires auth)
 - `GET /api/users/:id` - Get user by ID (requires auth)
 
-### 👥 Group Management
+### 👥 Group & 📅 Event Management
 
-- `GET /api/groups` - Get all public groups
-- `POST /api/groups` - Create new group (requires auth)
-- `GET /api/groups/:id` - Get group details
-- `POST /api/groups/:id/join` - Join group (requires auth)
-- `POST /api/groups/:id/leave` - Leave group (requires auth)
-- `PUT /api/groups/:id` - Update group (admin only)
-- `DELETE /api/groups/:id` - Delete group (admin only)
-
-### 📅 Event Management
-
-- `GET /api/events` - Get all public events
-- `POST /api/events` - Create new event (requires auth)
-- `GET /api/events/:id` - Get event details
-- `POST /api/events/:id/join` - Join event (requires auth)
-- `POST /api/events/:id/leave` - Leave event (requires auth)
-- `PUT /api/events/:id` - Update event (organizer only)
-- `DELETE /api/events/:id` - Delete event (organizer only)
+Groups and Events features have been permanently removed from this
+repository. The backend no longer exposes group or event endpoints and
+the corresponding models have been removed to reduce the persisted
+datasets to only `User` and `Message` collections. To restore these
+features, revert to the backup branch created before removal.
 
 ### 🛠️ Admin Endpoints (Database Management)
 
 - `GET /api/admin/stats` - Database statistics and counts
 - `GET /api/admin/users` - All users with populated relationships
-- `GET /api/admin/groups` - All groups with member details
-- `GET /api/admin/events` - All events with attendee details
+-- `GET /api/admin/groups` - (removed)
+-- `GET /api/admin/events` - (removed)
 - `GET /api/admin/activity` - Recent activity summary
 - `DELETE /api/admin/clear-all` - Clear all data (requires confirmation)
 

@@ -87,25 +87,14 @@ GET    /api/users/search       # Search users
 GET    /api/users/:id          # Get user by ID
 ```
 
-### Groups
+### Groups & Events
 
-```
-GET    /api/groups            # Get all groups
-POST   /api/groups            # Create new group
-GET    /api/groups/:id        # Get group by ID
-POST   /api/groups/:id/join   # Join group
-POST   /api/groups/:id/leave  # Leave group
-```
-
-### Events
-
-```
-GET    /api/events            # Get all events
-POST   /api/events            # Create new event
-GET    /api/events/:id        # Get event by ID
-POST   /api/events/:id/join   # Join event
-POST   /api/events/:id/leave  # Leave event
-```
+The Groups and Events features have been permanently removed from this
+codebase as part of a dataset reduction to retain only `User` and
+`Message` collections. The backend will not expose endpoints for groups
+or events and related models have been removed. If you need to restore
+these features, restore from the `cleanup/disable-groups-events-20251116`
+branch or a prior backup.
 
 ### Utility
 
@@ -294,20 +283,13 @@ curl -X GET http://localhost:3000/api/users/profile \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
-### Create Study Group
+### Groups & Events
 
-```bash
-curl -X POST http://localhost:3000/api/groups \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{
-    "name": "CS Study Group",
-    "description": "Weekly computer science study sessions",
-    "category": "Study Group",
-    "course": "COMP3330",
-    "maxMembers": 15
-  }'
-```
+Groups and Events endpoints have been permanently removed from the API.
+If you need to recreate or manage groups/events in the database directly,
+use MongoDB tools (mongosh / Compass) to inspect existing documents. To
+restore API support, revert to the backup branch that contained those
+endpoints.
 
 ## ⚙️ Environment Configuration
 

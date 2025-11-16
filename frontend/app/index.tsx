@@ -22,7 +22,7 @@ export default function Welcome() {
     <SafeAreaView style={styles.screen}>
       <Icon />
       <Text style={styles.title}>Connect on Campus</Text>
-      <Text style={styles.sub}>Find groups, events, and study buddies.</Text>
+  <Text style={styles.sub}>Find study buddies.</Text>
 
       <TouchableOpacity
         style={[styles.cta, { width: CARD_W }]}

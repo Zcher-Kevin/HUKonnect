@@ -81,8 +81,9 @@ app.get('/api/test', (req, res) => {
 // Import and use route modules
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
-const eventRoutes = require('./routes/events');
-const groupRoutes = require('./routes/groups');
+// Groups and Events features have been permanently removed.
+// The routes and models were intentionally deleted as part of the
+// dataset reduction to only retain `User` and `Message` collections.
 const adminRoutes = require('./routes/admin');
 
 // Compatibility shim: accept legacy client calls to /api/users/me/profile
@@ -99,8 +100,6 @@ app.use((req, res, next) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/events', eventRoutes);
-app.use('/api/groups', groupRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Attach messages routes (depends on Socket.IO for broadcasts)

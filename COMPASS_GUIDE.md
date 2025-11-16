@@ -7,8 +7,11 @@
 📁 **Collections Overview:**
 
 - 👥 **users** (4 documents) - Student profiles with authentication
-- 👨‍👩‍👧‍👦 **groups** (3 documents) - Study groups and clubs
-- 📅 **events** (3 documents) - Campus events and activities
+
+> Note: `groups` and `events` collections have been removed from the
+> active codebase. If you still have existing `groups` or `events`
+> documents in the database those are preserved, but the application
+> no longer exposes APIs to manage them.
 
 ---
 
@@ -55,23 +58,7 @@
 }
 ```
 
-### **Events Collection Sample:**
-
-```json
-{
-  "_id": ObjectId("..."),
-  "title": "Tech Talk: AI and Machine Learning",
-  "description": "Join us for an exciting presentation about the latest developments...",
-  "category": "Academic",
-  "location": "Computer Science Building Auditorium",
-  "startDate": "2025-09-29T18:00:00.000Z",
-  "endDate": "2025-09-29T20:00:00.000Z",
-  "attendees": [ObjectId("..."), ObjectId("...")],
-  "maxAttendees": 100,
-  "isPublic": true,
-  "tags": ["ai", "machine-learning", "tech"]
-}
-```
+<!-- Events collection examples removed: feature permanently removed -->
 
 ---
 
@@ -86,7 +73,7 @@
 ### **2. Query Builder**
 
 - Filter documents: `{"major": "Computer Science"}`
-- Find events by category: `{"category": "Academic"}`
+<!-- Event queries removed: feature permanently removed -->
 - Search public groups: `{"isPublic": true}`
 
 ### **3. Aggregation Pipeline**
@@ -151,7 +138,7 @@ Your Express.js API endpoints correspond to these collections:
 
 - `GET /api/users` → users collection
 - `GET /api/groups` → groups collection
-- `GET /api/events` → events collection
+<!-- `GET /api/events` → removed -->
 - `GET /api/admin/stats` → aggregated statistics
 
 ---
