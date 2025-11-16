@@ -75,6 +75,20 @@ async function fetchCurrentUserProfile() {
   }
 }
 
+// Allow manual update of current user profile info (used after edits)
+export function setCurrentUserProfile(u: any) {
+  try {
+    const display = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username;
+    currentUserDisplayName = display;
+    if (u._id) {
+      currentUserId = String(u._id);
+      peerNameCache.set(currentUserId, display);
+    }
+    // Also cache any provided names for peers
+    if (u._id && u.firstName) peerNameCache.set(String(u._id), display);
+  } catch (e) {}
+}
+
 function getDisplayForId(id: string) {
   return peerNameCache.get(id) || id;
 }
@@ -196,10 +210,25 @@ function ensureThread(peerId: string, peerName: string, chatIdOverride?: string)
 
 function upsertThreadFromMessage(msg: Message, peerId: string, peerName: string) {
   const chatId = msg.chatId;
+  // Defensive: sometimes incoming `peerName` can be noisy or equal to
+  // the message text (for example when an upstream payload is malformed).
+  // If `peerName` looks like a message (long text, punctuation) or equals
+  // the message text, ignore it and prefer cached/derived names.
+  const candidateName = (peerName && String(peerName)) || '';
+  const looksLikeMessageText = (s: string) => {
+    if (!s) return false;
+    // very long or contains multiple punctuation chars -> likely not a name
+    if (s.length > 120) return true;
+    const punctuationCount = (s.match(/[.,!?;:\-()"']/g) || []).length;
+    if (punctuationCount > 3) return true;
+    return false;
+  };
+  const safePeerName = (candidateName && candidateName === msg.text) || looksLikeMessageText(candidateName) ? undefined : candidateName;
+
   const thread = store.threads[chatId] ?? {
     id: chatId,
     peerId,
-    peerName: isFriendlyName(peerName) ? peerName : getDisplayForId(peerId),
+    peerName: isFriendlyName(safePeerName) ? safePeerName : getDisplayForId(peerId),
     updatedAt: msg.createdAt,
   };
   thread.lastMessage = msg.text;

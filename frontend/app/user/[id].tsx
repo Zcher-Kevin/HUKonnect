@@ -226,7 +226,17 @@ export default function UserProfileScreen() {
       : person
       ? DUMMY_EVENTS[person.id] || []
       : [];
-  const showSchedule = person?.scheduleVisible ?? true;
+  // Schedule visibility rules:
+  // - If viewing your own profile, always show schedule.
+  // - If the person has scheduleVisible=true, show to everyone.
+  // - If scheduleVisible=false (private), only show to followers.
+  const showSchedule = person
+    ? person.id === CURRENT_USER_ID
+      ? true
+      : person.scheduleVisible
+      ? true
+      : isFollowing(person.id)
+    : true;
 
   const isMe = person?.id === CURRENT_USER_ID;
   const following = person ? isFollowing(person.id) : false;

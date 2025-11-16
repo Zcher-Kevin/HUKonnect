@@ -1,8 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ActivityIndicator, Platform } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  Platform,
+} from "react-native";
 import axios from "axios";
 import { getItem as storageGetItem } from "../app/lib/storage";
 import { API_BASE } from "../app/lib/config";
+import { subscribe } from "../app/lib/events";
 
 const MAROON = "#A2172C";
 const TEXT = "#231F20";
@@ -45,8 +52,13 @@ export default function ProfileCard({ user: userProp }: { user?: any }) {
         if (mounted) setLoading(false);
       }
     })();
+    // subscribe to profile updates
+    const unsub = subscribe("profile:updated", (payload) => {
+      if (!userProp && payload) setUser(payload);
+    });
     return () => {
       mounted = false;
+      unsub();
     };
   }, [userProp]);
 
@@ -85,14 +97,14 @@ export default function ProfileCard({ user: userProp }: { user?: any }) {
 
 const styles = StyleSheet.create({
   header: {
-      paddingHorizontal: 16,
-      paddingTop: Platform.select({ ios: 4, android: 8, web: 12 }),
-      paddingBottom: 8,
-      alignItems: "center",
-    },
-  
-    headerTitle: { fontSize: 18, fontWeight: "700", color: TEXT },
-  
+    paddingHorizontal: 16,
+    paddingTop: Platform.select({ ios: 4, android: 8, web: 12 }),
+    paddingBottom: 8,
+    alignItems: "center",
+  },
+
+  headerTitle: { fontSize: 18, fontWeight: "700", color: TEXT },
+
   userCardWrap: {
     marginHorizontal: 16,
     marginBottom: 10,

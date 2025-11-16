@@ -7,7 +7,10 @@ setupAxiosLogging();
 
 export default function RootLayout() {
   return (
-    <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
+    <Stack
+      initialRouteName="index"
+      screenOptions={{ headerShown: false, contentStyle: { paddingTop: 12 } }}
+    >
       <Stack.Screen name="user/[id]" /> {/* Profile detail (no bottom bar) */}
       <Stack.Screen name="index" /> {/* Welcome */}
       <Stack.Screen name="auth/login" /> {/* Google login */}

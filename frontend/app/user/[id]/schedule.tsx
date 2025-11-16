@@ -1,8 +1,14 @@
 // app/user/[id]/schedule.tsx
 import React, { useMemo } from "react";
 import {
-  SafeAreaView, View, Text, StyleSheet, ScrollView, Dimensions,
-  TouchableOpacity, Platform
+  SafeAreaView,
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Dimensions,
+  TouchableOpacity,
+  Platform,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 
@@ -24,21 +30,61 @@ const PEOPLE: Record<string, any> = {
     id: "charlotte",
     name: "Charlotte Chan",
     events: [
-      { title: "Physics Lecture", color: "#B2F2E8", start: 9 * 60, end: 10 * 60, dayIdx: 0 },
-      { title: "Math Class", color: "#E5C6FF", start: 14 * 60, end: 15 * 60, dayIdx: 0 },
-      { title: "Group Study", color: "#B2F2E8", start: 10 * 60, end: 11 * 60, dayIdx: 2 },
-      { title: "Art Workshop", color: "#CFE2FF", start: 18 * 60, end: 19 * 60, dayIdx: 4 },
+      {
+        title: "Physics Lecture",
+        color: "#B2F2E8",
+        start: 9 * 60,
+        end: 10 * 60,
+        dayIdx: 0,
+      },
+      {
+        title: "Math Class",
+        color: "#E5C6FF",
+        start: 14 * 60,
+        end: 15 * 60,
+        dayIdx: 0,
+      },
+      {
+        title: "Group Study",
+        color: "#B2F2E8",
+        start: 10 * 60,
+        end: 11 * 60,
+        dayIdx: 2,
+      },
+      {
+        title: "Art Workshop",
+        color: "#CFE2FF",
+        start: 18 * 60,
+        end: 19 * 60,
+        dayIdx: 4,
+      },
     ],
   },
   sam: {
     id: "sam",
     name: "Sam Patel",
-    events: [{ title: "Quantum Seminar", color: "#CFE2FF", start: 11 * 60, end: 12 * 60, dayIdx: 2 }],
+    events: [
+      {
+        title: "Quantum Seminar",
+        color: "#CFE2FF",
+        start: 11 * 60,
+        end: 12 * 60,
+        dayIdx: 2,
+      },
+    ],
   },
   muller: {
     id: "muller",
     name: "Lena Muller",
-    events: [{ title: "Chem Lab", color: "#FFD6A5", start: 16 * 60, end: 17 * 60, dayIdx: 1 }],
+    events: [
+      {
+        title: "Chem Lab",
+        color: "#FFD6A5",
+        start: 16 * 60,
+        end: 17 * 60,
+        dayIdx: 1,
+      },
+    ],
   },
 };
 // ---------------------------------------------------
@@ -63,30 +109,28 @@ const makeDay = (i: number) => {
   d.setDate(d.getDate() + i);
   return d;
 };
-const dowLabel = (d: Date) => d.toLocaleDateString(undefined, { weekday: "short" });
+const dowLabel = (d: Date) =>
+  d.toLocaleDateString(undefined, { weekday: "short" });
 
 export default function ReadonlySchedule() {
-  // While backend events/groups are disabled, show a simple notice instead
-  const EVENTS_ENABLED = false;
-  if (!EVENTS_ENABLED) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: BG }}>
-        <View style={[styles.header, { justifyContent: 'center' }]}>
-          <Text style={styles.headerTitle}>Schedule feature is currently disabled</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
   const { id } = useLocalSearchParams<{ id: string }>();
   const person = PEOPLE[id || "charlotte"] || PEOPLE.charlotte;
 
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => makeDay(i)), []);
+  const days = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => makeDay(i)),
+    []
+  );
   const timeRows = useMemo(
-    () => Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i),
+    () =>
+      Array.from(
+        { length: END_HOUR - START_HOUR + 1 },
+        (_, i) => START_HOUR + i
+      ),
     []
   );
 
-  const eventsForDayIdx = (idx: number) => (person.events || []).filter((e: any) => e.dayIdx === idx);
+  const eventsForDayIdx = (idx: number) =>
+    (person.events || []).filter((e: any) => e.dayIdx === idx);
   const GRID_HEIGHT = (END_HOUR - START_HOUR) * HOUR_HEIGHT;
 
   return (
@@ -141,7 +185,7 @@ export default function ReadonlySchedule() {
                   ))}
 
                   {dayEvents.map((e: any, k: number) => {
-                    const top = ((e.start / 60) - START_HOUR) * HOUR_HEIGHT;
+                    const top = (e.start / 60 - START_HOUR) * HOUR_HEIGHT;
                     const height = ((e.end - e.start) / 60) * HOUR_HEIGHT;
                     return (
                       <View
@@ -178,7 +222,9 @@ export default function ReadonlySchedule() {
         <TouchableOpacity
           style={[styles.actBtn, { backgroundColor: MAROON }]}
           activeOpacity={0.9}
-          onPress={() => router.push({ pathname: "/messages/[id]", params: { id } })}
+          onPress={() =>
+            router.push({ pathname: "/messages/[id]", params: { id } })
+          }
         >
           <Text style={styles.actText}>Message</Text>
         </TouchableOpacity>
@@ -204,7 +250,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  headerTitle: { flex: 1, textAlign: "center", fontSize: 16, fontWeight: "800", color: TEXT },
+  headerTitle: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 16,
+    fontWeight: "800",
+    color: TEXT,
+  },
 
   col: {
     marginRight: 12,
@@ -227,7 +279,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dow: { fontSize: 14, fontWeight: "700", color: TEXT },
-  dateBadge: { backgroundColor: "#F1F5FF", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  dateBadge: {
+    backgroundColor: "#F1F5FF",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
   dateText: { fontSize: 12, fontWeight: "700", color: MAROON },
 
   hourRow: {

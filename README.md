@@ -96,7 +96,6 @@ brew services list | grep mongodb
 #stop the mongoDB service
 brew services stop mongodb/brew/mongodb-community
 ```
- 
 
 #### 5. Seed Database with Sample Data
 
@@ -159,7 +158,7 @@ Expected response:
 
 **📖 See `COMPASS_GUIDE.md` for detailed database exploration instructions**
 
-### test user data ###
+### test user data
 
 1.first cd to backend/scripts
 
@@ -220,8 +219,8 @@ features, revert to the backup branch created before removal.
 
 - `GET /api/admin/stats` - Database statistics and counts
 - `GET /api/admin/users` - All users with populated relationships
--- `GET /api/admin/groups` - (removed)
--- `GET /api/admin/events` - (removed)
+  -- `GET /api/admin/groups` - (removed)
+  -- `GET /api/admin/events` - (removed)
 - `GET /api/admin/activity` - Recent activity summary
 - `DELETE /api/admin/clear-all` - Clear all data (requires confirmation)
 

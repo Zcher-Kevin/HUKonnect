@@ -85,6 +85,15 @@ const userRoutes = require('./routes/users');
 // The routes and models were intentionally deleted as part of the
 // dataset reduction to only retain `User` and `Message` collections.
 const adminRoutes = require('./routes/admin');
+// Re-introduce a minimal Events read-only API (list + detail).
+// The route file is intentionally minimal to avoid re-enabling write/join flows.
+let eventsRoutes;
+try {
+  eventsRoutes = require('./routes/events');
+  app.use('/api/events', eventsRoutes);
+} catch (e) {
+  console.warn('Events routes not mounted:', e.message || e);
+}
 
 // Compatibility shim: accept legacy client calls to /api/users/me/profile
 // and rewrite them to /api/users/profile. This is a small development-only

@@ -17,6 +17,12 @@ import {
   Alert,
 } from "react-native";
 import { router } from "expo-router";
+import axios from "axios";
+import { getItem as storageGetItem } from "../lib/storage";
+import { API_BASE } from "../lib/config";
+import { publish } from "../lib/events";
+import { setCurrentUserProfile } from "../lib/chatStore";
+import { updateCurrentUserData } from "../lib/followStore";
 
 const MAROON = "#A2172C";
 const BG = "#FFF7F7";
@@ -56,51 +62,133 @@ export default function EditProfile() {
   const [gender, setGender] = useState<"Male" | "Female" | "">(
     CURRENT_USER.gender || ""
   );
-  const [yearOfStudy, setYearOfStudy] =
-    useState<"" | (typeof YEAR_OPTIONS)[number]>(
-      CURRENT_USER.yearOfStudy || ""
-    );
+  const [yearOfStudy, setYearOfStudy] = useState<
+    "" | (typeof YEAR_OPTIONS)[number]
+  >(CURRENT_USER.yearOfStudy || "");
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   const onSave = async () => {
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail || !trimmedEmail.includes("@")) {
-      Alert.alert("Check email", "Please enter a valid email address.");
-      return;
-    }
-
-    const payload = {
-      email: trimmedEmail,
-      firstName: first.trim(),
-      lastName: last.trim(),
-      major: major.trim(),
-      minor: minor.trim(),
-      dob: { day: day.trim(), month: month.trim(), year: year.trim() },
-      gender: gender || null,
-      yearOfStudy: yearOfStudy || null,
+    // Prepare payload (do not attempt to change email here)
+    const payload: any = {
+      firstName: first.trim() || undefined,
+      lastName: last.trim() || undefined,
+      major: major.trim() || undefined,
+      minor: minor.trim() || undefined,
+      gender: gender || undefined,
+      yearOfStudy: yearOfStudy || undefined,
     };
 
-    try {
-      // BACKEND TODO:
-      // const res = await fetch("http://<backend>/users/me", {
-      //   method: "PATCH",
-      //   headers: {
-      //     "Content-Type": "application/json",
-      //     Authorization: `Bearer ${token}`,
-      //   },
-      //   body: JSON.stringify(payload),
-      // });
-      // if (!res.ok) throw new Error("Update failed");
+    // Build DOB as ISO date string if fields look valid
+    const dd = String(day || "")
+      .trim()
+      .padStart(2, "0");
+    const mm = String(month || "")
+      .trim()
+      .padStart(2, "0");
+    const yyyy = String(year || "").trim();
+    if (/^\d{4}$/.test(yyyy) && /^\d{2}$/.test(mm) && /^\d{2}$/.test(dd)) {
+      // YYYY-MM-DD
+      payload.dob = `${yyyy}-${mm}-${dd}`;
+    }
 
-      Alert.alert("Saved", "Your profile has been updated.");
-      router.back();
-    } catch (err) {
-      console.error(err);
+    setIsSaving(true);
+    try {
+      const token = (await storageGetItem("token")) as string | null;
+      // debug: log payload
+      console.log("[edit-profile] sending payload", payload);
+      const res = await axios.put(`${API_BASE}/api/users/profile`, payload, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        timeout: 8000,
+      });
+      console.log("[edit-profile] response", res?.status, res?.data);
+
+      if (res?.data?.success) {
+        // Update chat store cache and notify other parts of the app to refresh profile displays
+        try {
+          setCurrentUserProfile(res.data.user);
+        } catch (e) {}
+        try {
+          updateCurrentUserData({
+            name: res.data.user.firstName
+              ? `${res.data.user.firstName} ${
+                  res.data.user.lastName || ""
+                }`.trim()
+              : undefined,
+            major: res.data.user.major,
+          });
+        } catch (e) {}
+        try {
+          publish("profile:updated", res.data.user);
+        } catch (e) {}
+        Alert.alert("Saved", "Your profile has been updated.");
+        router.back();
+      } else {
+        throw new Error(res?.data?.message || "Update failed");
+      }
+    } catch (err: any) {
+      console.error("Profile save error", err);
+      const serverMsg = err?.response?.data?.message || err?.message;
+      const status = err?.response?.status;
       Alert.alert(
         "Update failed",
-        "We couldn't save your changes. Please try again."
+        serverMsg || `Request failed${status ? ` (status ${status})` : ""}`
       );
+    } finally {
+      setIsSaving(false);
     }
   };
+
+  // If the user's email is a Gmail address (Google sign-in), do not allow
+  // editing it from this screen. This prevents users from changing a Google-linked email here.
+  const isGmail =
+    String(email || "")
+      .toLowerCase()
+      .endsWith("@gmail.com") ||
+    String(email || "")
+      .toLowerCase()
+      .endsWith("@googlemail.com");
+
+  // Fetch current user's profile from backend and prefill the form when available
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const token = (await storageGetItem("token")) as string | null;
+        if (!token) return;
+        const res = await axios.get(`${API_BASE}/api/users/profile`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          timeout: 8000,
+        });
+        const u = res?.data?.user;
+        if (!u || !mounted) return;
+        // Map server fields to local form state (safe defaults)
+        if (u.email) setEmail(String(u.email));
+        else if (u.username) setEmail(String(u.username));
+        if (u.firstName) setFirst(String(u.firstName));
+        if (u.lastName) setLast(String(u.lastName));
+        if (u.major) setMajor(String(u.major));
+        if (u.minor) setMinor(String(u.minor));
+        if (u.dob && typeof u.dob === "object") {
+          if (u.dob.day) setDay(String(u.dob.day));
+          if (u.dob.month) setMonth(String(u.dob.month));
+          if (u.dob.year) setYear(String(u.dob.year));
+        }
+        if (u.gender)
+          setGender(
+            u.gender === "Male" ? "Male" : u.gender === "Female" ? "Female" : ""
+          );
+        if (u.yearOfStudy) setYearOfStudy(String(u.yearOfStudy) as any);
+      } catch (e) {
+        // ignore errors — keep placeholders
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -128,11 +216,12 @@ export default function EditProfile() {
         <TextInput
           placeholder="Email"
           placeholderTextColor={SUBTEXT}
-          style={styles.input}
+          style={[styles.input, styles.inputDisabled]}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
+          editable={false}
         />
 
         {/* Name row */}
@@ -209,19 +298,13 @@ export default function EditProfile() {
           {GENDER_OPTIONS.map((g) => (
             <TouchableOpacity
               key={g}
-              style={[
-                styles.chip,
-                gender === g && styles.chipActive,
-              ]}
+              style={[styles.chip, gender === g && styles.chipActive]}
               onPress={() =>
                 setGender((prev) => (prev === g ? "" : (g as any)))
               }
             >
               <Text
-                style={[
-                  styles.chipText,
-                  gender === g && styles.chipTextActive,
-                ]}
+                style={[styles.chipText, gender === g && styles.chipTextActive]}
               >
                 {g}
               </Text>
@@ -235,13 +318,8 @@ export default function EditProfile() {
           {YEAR_OPTIONS.map((y) => (
             <TouchableOpacity
               key={y}
-              style={[
-                styles.chip,
-                yearOfStudy === y && styles.chipActive,
-              ]}
-              onPress={() =>
-                setYearOfStudy((prev) => (prev === y ? "" : y))
-              }
+              style={[styles.chip, yearOfStudy === y && styles.chipActive]}
+              onPress={() => setYearOfStudy((prev) => (prev === y ? "" : y))}
             >
               <Text
                 style={[
@@ -256,11 +334,14 @@ export default function EditProfile() {
         </View>
 
         <TouchableOpacity
-          style={[styles.btn, { width: WRAP_W }]}
+          style={[styles.btn, { width: WRAP_W, opacity: isSaving ? 0.6 : 1 }]}
           activeOpacity={0.9}
           onPress={onSave}
+          disabled={isSaving}
         >
-          <Text style={styles.btnText}>Save changes</Text>
+          <Text style={styles.btnText}>
+            {isSaving ? "Saving..." : "Save changes"}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -324,6 +405,10 @@ const styles = StyleSheet.create({
     color: TEXT,
     fontSize: 16,
     flexGrow: 1,
+  },
+  inputDisabled: {
+    opacity: 0.6,
+    backgroundColor: "#F0F0F0",
   },
   half: {
     flexBasis: "48%",

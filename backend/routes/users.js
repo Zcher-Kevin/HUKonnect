@@ -1,35 +1,17 @@
 const express = require('express');
 const User = require('../models/User');
 const auth = require('../middleware/auth');
+const asyncHandler = require('../lib/asyncHandler');
+const { sendError } = require('../lib/errorResponse');
 
 const router = express.Router();
 
 // Get user profile
-router.get('/profile', auth, async (req, res) => {
-  try {
-    const user = await User.findById(req.userId);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      user: user.toPublicJSON()
-    });
-
-  } catch (error) {
-    console.error('Get profile error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get user profile',
-      error: error.message
-    });
-  }
-});
+router.get('/profile', auth, asyncHandler(async (req, res) => {
+  const user = await User.findById(req.userId);
+  if (!user) return sendError(res, 404, 'User not found');
+  res.json({ success: true, user: user.toPublicJSON() });
+}));
 
 // Update user profile
 router.put('/profile', auth, async (req, res) => {

@@ -126,3 +126,13 @@ export function useStoreVersion(): number {
   }, []);
   return v;
 }
+
+// Update the in-memory CURRENT_USER record (useful after editing profile)
+export function updateCurrentUserData(data: Partial<Person>) {
+  const me = getPerson(CURRENT_USER_ID);
+  if (!me) return;
+  try {
+    Object.assign(me, data);
+    emit();
+  } catch (e) {}
+}

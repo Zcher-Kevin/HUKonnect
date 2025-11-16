@@ -21,6 +21,10 @@ import { getPerson } from "../lib/followStore";
 import { getItem as storageGetItem } from "../lib/storage";
 import axios from "axios";
 import { API_BASE } from "../lib/config";
+import MessageHeader from "../../components/MessageHeader";
+import MessageInput from "../../components/MessageInput";
+import MessageBubble from "../../components/MessageBubble";
+import styles from "./messages.styles";
 
 const BG = "#FFF7F7";
 const TEXT = "#231F20";
@@ -31,7 +35,25 @@ const BUBBLE_THEM = "#FFFFFF";
 
 export default function DMChat() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const peerId = id!;
+  const routeId = id!;
+  // myId: derived from JWT in storage (if present)
+  const [myId, setMyId] = useState<string | null>(null);
+
+  // Resolve peerId from the route. The route `id` may be a raw user id
+  // (peerId) or a canonical chat id like `dm:<idA>-<idB>`. If it's the
+  // canonical form and we know `myId`, pick the other id. If myId is not
+  // yet available we pick the second part as a stable default.
+  const peerId = useMemo(() => {
+    if (!routeId.startsWith("dm:")) return routeId;
+    const body = routeId.slice(3);
+    const parts = body.split("-");
+    if (parts.length === 2) {
+      if (myId) return parts[0] === myId ? parts[1] : parts[0];
+      return parts[1];
+    }
+    return body;
+  }, [routeId, myId]);
+
   const person = getPerson(peerId);
   // --- state and derived values ---
   const [canonicalChatId, setCanonicalChatId] = useState<string>(
@@ -39,13 +61,12 @@ export default function DMChat() {
   );
   const messages = useMessages(canonicalChatId);
   const threads = useThreads();
-  const peerNameFromStore = threads.find(
-    (t) => t.id === canonicalChatId
-  )?.peerName;
+  // Prefer the thread entry that matches the peerId (not only the chatId)
+  // because the store may hold the thread under a canonical id like
+  // `dm:<idA>-<idB>` while we temporarily use `dm:<peerId>`.
+  const peerNameFromStore = threads.find((t) => t.peerId === peerId)?.peerName;
   const peerName = peerNameFromStore || person?.name || peerId;
 
-  // myId: derived from JWT in storage (if present)
-  const [myId, setMyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   // localDisplayName: a quick-resolved, human-friendly name used for header & reply snippets
   const [localDisplayName, setLocalDisplayName] = useState<string | null>(null);
@@ -213,71 +234,29 @@ export default function DMChat() {
   };
 
   const renderItem = ({ item }: { item: Message }) => {
-    const mine =
-      item.id?.toString().startsWith("temp-") ||
-      (myId && item.senderId === myId);
-    const reply =
-      item.replyToId && messages.find((x) => x.id === item.replyToId);
-
+    const reply = item.replyToId
+      ? messages.find((x) => x.id === item.replyToId)
+      : undefined;
     return (
-      <View style={[styles.row, mine ? styles.right : styles.left]}>
-        <Pressable
-          style={[
-            styles.bubble,
-            {
-              backgroundColor: mine ? BUBBLE_ME : BUBBLE_THEM,
-              alignSelf: mine ? "flex-end" : "flex-start",
-            },
-          ]}
-          onLongPress={() => setMenuFor(item)}
-          onPress={() => {
-            if (Platform.OS === "web") setMenuFor(item);
-          }}
-        >
-          {reply && (
-            <View style={styles.replyWrap}>
-              <View style={styles.replyBar} />
-              <View style={{ flex: 1 }}>
-                <Text numberOfLines={1} style={styles.replyName}>
-                  {reply.id?.toString().startsWith("temp-") ||
-                  (myId && reply.senderId === myId)
-                    ? "You"
-                    : localDisplayName || peerName}
-                </Text>
-                <Text numberOfLines={1} style={styles.replySnippet}>
-                  {reply.text}
-                </Text>
-              </View>
-            </View>
-          )}
-
-          <Text style={styles.msgText}>{item.text}</Text>
-          <View style={styles.metaRow}>
-            {item.editedAt && <Text style={styles.edited}>edited</Text>}
-            <Text style={styles.time}>
-              {new Date(item.createdAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
-          </View>
-        </Pressable>
-      </View>
+      <MessageBubble
+        item={item}
+        reply={reply}
+        myId={myId}
+        localDisplayName={localDisplayName}
+        peerName={peerName}
+        onLongPress={(m: any) => setMenuFor(m)}
+      />
     );
   };
+
+  // MessageBubble component moved to external file to keep this screen focused
 
   const headerDisplay = localDisplayName || peerName;
 
   return (
     <SafeAreaView style={styles.screen}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }}>
-          <Ionicons name="chevron-back" size={22} color={TEXT} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{headerDisplay}</Text>
-        <View style={{ width: 30 }} />
-      </View>
+      <MessageHeader title={headerDisplay} onBack={() => router.back()} />
 
       <FlatList
         ref={listRef}
@@ -318,23 +297,12 @@ export default function DMChat() {
         </View>
       )}
 
-      <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          placeholder={editing ? "Edit message..." : "Message"}
-          placeholderTextColor={SUB}
-          value={text}
-          onChangeText={setText}
-          multiline
-        />
-        <TouchableOpacity style={styles.send} onPress={send}>
-          <Ionicons
-            name={editing ? "checkmark" : "send"}
-            size={20}
-            color="#fff"
-          />
-        </TouchableOpacity>
-      </View>
+      <MessageInput
+        text={text}
+        setText={setText}
+        onSend={send}
+        editing={!!editing}
+      />
 
       {/* Context menu */}
       <Modal
@@ -391,134 +359,4 @@ export default function DMChat() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: BG },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontWeight: "800",
-    color: TEXT,
-    fontSize: 16,
-  },
-  row: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  left: { alignItems: "flex-start" },
-  right: { alignItems: "flex-end" },
-  bubble: {
-    maxWidth: "82%",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    elevation: 1,
-  },
-  msgText: {
-    color: TEXT,
-    fontSize: 16,
-    lineHeight: 20,
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignSelf: "flex-end",
-    gap: 6,
-    marginTop: 4,
-  },
-  edited: { color: SUB, fontSize: 10 },
-  time: { color: SUB, fontSize: 10 },
-  replyWrap: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 6,
-    padding: 8,
-    borderRadius: 10,
-    backgroundColor: "rgba(0,0,0,0.04)",
-  },
-  replyBar: {
-    width: 3,
-    borderRadius: 3,
-    backgroundColor: ACCENT,
-  },
-  replyName: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: TEXT,
-  },
-  replySnippet: {
-    fontSize: 12,
-    color: SUB,
-  },
-  bar: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 72,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 10,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  barTitle: { fontWeight: "800", color: TEXT },
-  barSnippet: { color: SUB, marginTop: 2 },
-  barClose: { padding: 6 },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    padding: 10,
-    gap: 8,
-    backgroundColor: BG,
-  },
-  input: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 120,
-    backgroundColor: "#fff",
-    borderRadius: 22,
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 10,
-    color: TEXT,
-  },
-  send: {
-    backgroundColor: ACCENT,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuBack: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.15)",
-  },
-  menu: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 72,
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 8,
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 12,
-  },
-  menuText: {
-    color: TEXT,
-    fontWeight: "700",
-  },
-});
+// styles moved to ./messages.styles.ts
