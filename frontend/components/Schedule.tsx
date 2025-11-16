@@ -377,6 +377,8 @@ export default function ScheduleScreen() {
                             backgroundColor: e.color,
                             width: COL_W - 24,
                             left: 12,
+                            // Slight transparency so schedule blocks are less visually heavy
+                            opacity: 0.92,
                           },
                         ]}
                       >

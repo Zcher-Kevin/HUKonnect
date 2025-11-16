@@ -60,13 +60,14 @@ router.get('/users', async (req, res) => {
   try {
     const users = await User.find()
       .select('-password') // Exclude password
-      .populate('joinedGroups', 'name category')
-      .populate('eventsAttending', 'title category startDate')
       .sort({ createdAt: -1 });
+
+    // map to public shape
+    const publicUsers = users.map(u => u.toPublicJSON ? u.toPublicJSON() : u);
 
     res.json({
       success: true,
-      data: users
+      data: publicUsers
     });
   } catch (error) {
     console.error('Get users error:', error);

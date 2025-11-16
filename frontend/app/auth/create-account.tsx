@@ -3,7 +3,7 @@
 // Gender + Year of Study use fixed option pickers (no free text).
 // BACKEND TODO: hook onCreate into /auth/register.
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -12,12 +12,19 @@ import {
   ActivityIndicator,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
+  Modal,
+  FlatList,
   StyleSheet,
   Dimensions,
   Platform,
   Alert,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import EmailCredentials from "./sections/EmailCredentials";
+import NameFields from "./sections/NameFields";
+import MajorMinorYear from "./sections/MajorMinorYear";
+import DateOfBirth from "./sections/DateOfBirth";
 
 /**
  * ================================
@@ -34,6 +41,8 @@ import {
   setItem as storageSetItem,
   getItem as storageGetItem,
 } from "../lib/storage";
+import { emitAuthChange } from "../lib/authEvents";
+import { setAuthPending, isAuthPending } from "../lib/authFlag";
 import { isValidEmail } from "../lib/validators";
 import { API_BASE } from "../lib/config";
 // Developer convenience: when true, clicking Create Account will skip
@@ -54,8 +63,27 @@ const RADIUS = 20;
 const GENDER_OPTIONS = ["Male", "Female"];
 const YEAR_OPTIONS = ["1", "2", "3", "4", "5", "Masters", "PhD"];
 
-export default function CreateAccount() {
+export default function email() {
   const params = useLocalSearchParams();
+  const [first, setFirst] = useState("");
+  const [last, setLast] = useState("");
+  // Local auth fields (optional). If provided we will register using these
+  // credentials instead of generating a random password.
+  const [emailInput, setEmailInput] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [major, setMajor] = useState("");
+  const [minor, setMinor] = useState("");
+  const [day, setDay] = useState("");
+  const [month, setMonth] = useState("");
+  const [year, setYear] = useState("");
+  const [gender, setGender] = useState<"Male" | "Female" | "">("");
+  const [yearOfStudy, setYearOfStudy] = useState<
+    "" | (typeof YEAR_OPTIONS)[number]
+  >("");
+  const [busy, setBusy] = useState(false);
+  const submittingRef = useRef(false);
+
   // If the login flow passed a profile (from Google), prefill first/last name
   React.useEffect(() => {
     try {
@@ -66,24 +94,6 @@ export default function CreateAccount() {
       // ignore parse errors
     }
   }, [params]);
-  const [email, setEmail] = useState("");
-  const [first, setFirst] = useState("");
-  const [last, setLast] = useState("");
-  // Local auth fields (optional). If provided we will register using these
-  // credentials instead of generating a random password.
-  const [emailInput, setEmailInput] = useState("");
-  const [passwordInput, setPasswordInput] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [nickname, setNickname] = useState("");
-  const [major, setMajor] = useState("");
-  const [minor, setMinor] = useState("");
-  const [day, setDay] = useState("");
-  const [month, setMonth] = useState("");
-  const [year, setYear] = useState("");
-  const [gender, setGender] = useState<"Male" | "Female" | "">("");
-  const [yearOfStudy, setYearOfStudy] =
-    useState<"" | (typeof YEAR_OPTIONS)[number]>("");
-  const [busy, setBusy] = useState(false);
 
   /**
    * Build DOB in ISO (YYYY-MM-DD) from the three inputs.
@@ -106,73 +116,100 @@ export default function CreateAccount() {
    *  - return the canonical user object (optional)
    */
   const submitProfile = async () => {
-    // Dev shortcut: immediately return a fake user and token so testers can
-    // enter the app without the backend. This is intentionally simple and
-    // should be disabled before production.
-    if (DEV_QUICK_REGISTER) {
-      const devToken = `dev-token-${Date.now()}`;
+    // Prevent concurrent submissions from multiple rapid taps or re-renders.
+    if (submittingRef.current) {
       try {
-        await storageSetItem("token", devToken);
-      } catch (e) {
-        // ignore SecureStore errors during quick dev flow
-      }
-      return { user: { id: "dev", firstName: first.trim() || "Dev User" } };
+        if ((globalThis as any).__DEV__)
+          console.warn(
+            "[submitProfile] already submitting, ignoring duplicate call"
+          );
+      } catch (e) {}
+      return;
     }
-    // NOTE: Relaxed validation to allow quick-start registration with no input.
-    // If the user leaves fields blank we will auto-generate a minimal account
-    // (username + random password) so they can enter the app immediately.
-    // DOB is optional — only build it when all three parts are provided.
-    let dob: string | undefined = undefined;
-    if (day || month || year) {
-      // Only require a full date if any part was provided
-      if (day.length !== 2 || month.length !== 2 || year.length !== 4) {
-        throw new Error(
-          "Please enter a valid date (DD/MM/YYYY) or leave it blank."
-        );
-      }
-      dob = buildDob();
-    }
-
-    // Retrieve your JWT created during Google sign-in (if you saved one)
-    let token = (await storageGetItem("token")) as string | null;
+    submittingRef.current = true;
+    // Mark that an auth flow is in progress so other components (for
+    // example the Schedule autosave) don't accidentally send profile
+    // updates using a stale token. Use the in-memory flag for immediate
+    // coordination.
     try {
-      // eslint-disable-next-line no-console
-      if ((globalThis as any).__DEV__)
-        console.log("[submitProfile] stored token present:", Boolean(token));
+      setAuthPending(true);
     } catch (e) {}
-
-    // Defensive: if a non-JWT token (for example a leftover dev token like
-    // "dev-token-...") is stored, clear it so we don't send it to the
-    // backend where jwt.verify will throw a 'jwt malformed' error. A JWT
-    // typically has three dot-separated segments.
-    if (token && typeof token === "string") {
-      const parts = token.split(".");
-      if (parts.length !== 3) {
+    try {
+      // Dev shortcut: immediately return a fake user and token so testers can
+      // enter the app without the backend. This is intentionally simple and
+      // should be disabled before production.
+      if (DEV_QUICK_REGISTER) {
+        const devToken = `dev-token-${Date.now()}`;
         try {
-          // eslint-disable-next-line no-console
-          if ((globalThis as any).__DEV__)
-            console.warn(
-              "[submitProfile] stored token is not a JWT; clearing stored token"
-            );
-        } catch (e) {}
-        try {
-          await storageSetItem("token", "");
+          await storageSetItem("token", devToken);
         } catch (e) {
-          // ignore storage errors
+          // ignore SecureStore errors during quick dev flow
         }
-        token = null;
+        return { user: { id: "dev", firstName: first.trim() || "Dev User" } };
       }
-    }
+      // NOTE: Relaxed validation to allow quick-start registration with no input.
+      // If the user leaves fields blank we will auto-generate a minimal account
+      // (username + random password) so they can enter the app immediately.
+      // DOB is optional — only build it when all three parts are provided.
+      let dob: string | undefined = undefined;
+      if (day || month || year) {
+        // Only require a full date if any part was provided
+        if (day.length !== 2 || month.length !== 2 || year.length !== 4) {
+          throw new Error(
+            "Please enter a valid date (DD/MM/YYYY) or leave it blank."
+          );
+        }
+        dob = buildDob();
+      }
 
-    // If there's no token, attempt to register the user. Priority:
-    // 1) If the user manually provided email+password on this screen, use that.
-    // 2) Else try to use the profile passed from an OAuth flow (params.profile).
-    // 3) Else fall back to auto-generated username + random password.
-    if (!token) {
+      // Retrieve your JWT created during Google sign-in (if you saved one)
+      let token = (await storageGetItem("token")) as string | null;
       try {
-        // If user manually entered an email/password, use those
-        if (emailInput.trim() || passwordInput) {
-          // Client-side validation: ensur          npx expo start --dev-client -c          rm -rf /Users/kevin/Desktop/HUKonnect/frontend/node_modulese provided email looks valid
+        // eslint-disable-next-line no-console
+        if ((globalThis as any).__DEV__)
+          console.log("[submitProfile] stored token present:", Boolean(token));
+      } catch (e) {}
+
+      // Defensive: if a non-JWT token (for example a leftover dev token like
+      // "dev-token-...") is stored, clear it so we don't send it to the
+      // backend where jwt.verify will throw a 'jwt malformed' error. A JWT
+      // typically has three dot-separated segments.
+      if (token && typeof token === "string") {
+        const parts = token.split(".");
+        if (parts.length !== 3) {
+          try {
+            // eslint-disable-next-line no-console
+            if ((globalThis as any).__DEV__)
+              console.warn(
+                "[submitProfile] stored token is not a JWT; clearing stored token"
+              );
+          } catch (e) {}
+          try {
+            await storageSetItem("token", "");
+          } catch (e) {
+            // ignore storage errors
+          }
+          token = null;
+        }
+      }
+
+      // If the user provided manual email/password on this screen, prefer
+      // creating a fresh account regardless of any existing stored token.
+      // This prevents updating another user's profile when trying to create a
+      // new account on the same device.
+      if (emailInput.trim() || passwordInput) {
+        try {
+          // Clear any existing stored token so intermediate profile PUTs
+          // (including accidental ones) won't authenticate as the previous
+          // user. We keep the in-memory `auth:pending` flag set so other
+          // components will pause backend sync.
+          try {
+            await storageSetItem("token", "");
+            token = null;
+          } catch (e) {
+            // ignore storage errors
+          }
+          // Client-side validation
           if (emailInput && !isValidEmail(emailInput)) {
             throw new Error("Please enter a valid email address.");
           }
@@ -190,28 +227,52 @@ export default function CreateAccount() {
 
           const safeFirst =
             first.trim() || `User${Date.now().toString().slice(-4)}`;
-          const registerRes = await (() => {
-            const url = `${API_BASE}/api/auth/register`;
-            const body = {
-              email: emailInput.trim(),
-              password: passwordInput,
-              firstName: safeFirst,
-              ...(last.trim() ? { lastName: last.trim() } : {}),
-            };
-            // Debug: log exact request target and body in dev
-            try {
-              // eslint-disable-next-line no-console
-              console.log("[register] POST", url, body);
-            } catch (e) {}
-            return axios.post(url, body, { timeout: 15000 });
-          })();
-
+          const url = `${API_BASE}/api/auth/register`;
+          const body = {
+            email: emailInput.trim(),
+            password: passwordInput,
+            firstName: safeFirst,
+            ...(last.trim() ? { lastName: last.trim() } : {}),
+            // Request a long-lived session for pre-login convenience
+            remember: true,
+            ...(yearOfStudy ? { yearOfStudy: yearOfStudy } : {}),
+            ...(gender ? { gender } : {}),
+            ...(dob ? { dob } : {}),
+          };
+          try {
+            // eslint-disable-next-line no-console
+            console.log("[register] POST", url, body);
+          } catch (e) {}
+          const registerRes = await axios.post(url, body, { timeout: 15000 });
           token = registerRes.data?.token;
-          if (token) {
-            await storageSetItem("token", token as string);
-          }
-        } else {
-          // No manual creds — try to use OAuth-provided profile or fallback to auto-generated
+          if (token) await storageSetItem("token", token as string);
+          try {
+            emitAuthChange();
+          } catch (e) {}
+        } catch (regErr: any) {
+          const status = regErr?.response?.status;
+          const serverMsg = regErr?.response?.data?.message || regErr?.message;
+          throw new Error(
+            status ? `Status ${status}: ${serverMsg}` : serverMsg
+          );
+        }
+      }
+
+      // If the user didn't supply manual credentials we still want to create
+      // a fresh account for them (this screen's purpose is registration). If
+      // a token is already stored for a different user, silently clearing it
+      // and registering avoids mistakenly updating that other account.
+      // Run generated-account registration when manual credentials are not
+      // provided (regardless of whether a token was present).
+      if (!emailInput.trim() && !passwordInput) {
+        try {
+          // Clear any previously stored token before creating a generated
+          // account to avoid accidental updates being authenticated as the
+          // old user.
+          try {
+            await storageSetItem("token", "");
+            token = null;
+          } catch (e) {}
           const p = params.profile
             ? JSON.parse(params.profile as any as string)
             : null;
@@ -226,76 +287,82 @@ export default function CreateAccount() {
             .slice(-4)}`;
           const randomPassword = Math.random().toString(36).slice(2, 12);
 
-          // Ensure we provide at least a firstName to satisfy the server; if
-          // user didn't enter one we auto-generate a friendly name.
           const safeFirst =
             first.trim() || `User${Date.now().toString().slice(-4)}`;
-
-          const registerRes = await (() => {
-            const url = `${API_BASE}/api/auth/register`;
-            const body = {
-              username: usernameCandidate,
-              ...(email ? { email } : {}),
-              password: randomPassword,
-              firstName: safeFirst,
-              ...(last.trim() ? { lastName: last.trim() } : {}),
-            };
-            try {
-              // eslint-disable-next-line no-console
-              console.log("[register] POST", url, body);
-            } catch (e) {}
-            return axios.post(url, body, { timeout: 15000 });
-          })();
-
+          const url = `${API_BASE}/api/auth/register`;
+          const body = {
+            username: usernameCandidate,
+            ...(email ? { email } : {}),
+            password: randomPassword,
+            firstName: safeFirst,
+            ...(last.trim() ? { lastName: last.trim() } : {}),
+            // Request a long-lived session for pre-login convenience
+            remember: true,
+            ...(yearOfStudy ? { yearOfStudy } : {}),
+            ...(gender ? { gender } : {}),
+            ...(dob ? { dob } : {}),
+          };
+          try {
+            // eslint-disable-next-line no-console
+            console.log("[register] POST", url, body);
+          } catch (e) {}
+          const registerRes = await axios.post(url, body, { timeout: 15000 });
           token = registerRes.data?.token;
-          if (token) {
-            await storageSetItem("token", token as string);
-          }
+          if (token) await storageSetItem("token", token as string);
+          try {
+            emitAuthChange();
+          } catch (e) {}
+        } catch (regErr: any) {
+          const status = regErr?.response?.status;
+          const serverMsg = regErr?.response?.data?.message || regErr?.message;
+          throw new Error(
+            status ? `Status ${status}: ${serverMsg}` : serverMsg
+          );
         }
-      } catch (regErr: any) {
-        // Log details for debugging (do not show raw tokens in UI)
-        // eslint-disable-next-line no-console
-        console.error("Register error details:", {
-          message: regErr?.message,
-          status: regErr?.response?.status,
-          response: regErr?.response?.data,
-        });
-        // bubble a helpful error to the UI including status when available
-        const status = regErr?.response?.status;
-        const serverMsg = regErr?.response?.data?.message || regErr?.message;
-        throw new Error(status ? `Status ${status}: ${serverMsg}` : serverMsg);
       }
+
+      // Build the payload only with fields the user actually provided so we
+      // don't overwrite generated values (e.g., auto-generated firstName).
+      const payload: any = {};
+      if (first.trim()) payload.firstName = first.trim();
+      if (last.trim()) payload.lastName = last.trim();
+      if (major.trim()) payload.major = major.trim();
+      if (minor.trim()) payload.minor = minor.trim();
+      // Include yearOfStudy selection if provided. The backend will
+      // normalize numeric or label values to the canonical enum.
+      if (yearOfStudy && yearOfStudy.trim())
+        payload.yearOfStudy = yearOfStudy.trim();
+      if (dob) payload.dob = dob;
+      if (gender.trim()) payload.gender = gender.trim();
+      payload.termsAccepted = true;
+
+      // Note: backend mounts user routes at /api/users and exposes the
+      // current-user profile endpoints at /profile (not /me/profile).
+      // (dev logging removed)
+      const res = await axios.put(`${API_BASE}/api/users/profile`, payload, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        timeout: 15000,
+      });
+
+      try {
+        // eslint-disable-next-line no-console
+        if ((globalThis as any).__DEV__)
+          console.log(
+            "[submitProfile] PUT",
+            `${API_BASE}/api/users/profile`,
+            payload
+          );
+      } catch (e) {}
+
+      return res.data; // expected { user: {...} } (shape up to your backend)
+    } finally {
+      // Clear the in-memory pending flag so other UI components resume
+      // backend sync behavior.
+      try {
+        setAuthPending(false);
+      } catch (e) {}
+      submittingRef.current = false;
     }
-
-    // Build the payload only with fields the user actually provided so we
-    // don't overwrite generated values (e.g., auto-generated firstName).
-    const payload: any = {};
-    if (first.trim()) payload.firstName = first.trim();
-    if (last.trim()) payload.lastName = last.trim();
-    if (major.trim()) payload.major = major.trim();
-    if (minor.trim()) payload.minor = minor.trim();
-    if (dob) payload.dob = dob;
-    if (gender.trim()) payload.gender = gender.trim();
-    payload.termsAccepted = true;
-
-    // Note: backend mounts user routes at /api/users and exposes the
-    // current-user profile endpoints at /profile (not /me/profile).
-    const res = await axios.put(`${API_BASE}/api/users/profile`, payload, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      timeout: 15000,
-    });
-
-    try {
-      // eslint-disable-next-line no-console
-      if ((globalThis as any).__DEV__)
-        console.log(
-          "[submitProfile] PUT",
-          `${API_BASE}/api/users/profile`,
-          payload
-        );
-    } catch (e) {}
-
-    return res.data; // expected { user: {...} } (shape up to your backend)
   };
 
   /**
@@ -306,15 +373,22 @@ export default function CreateAccount() {
    * LATER: comment out the mock, then uncomment the real call.
    */
   const onCreate = async () => {
-    const trimmedEmail = email.trim();
-
-    if (!trimmedEmail) {
-      Alert.alert("Missing email", "Please enter your email.");
+    try {
+      setBusy(true);
+      // Call the backend to save the profile. submitProfile will throw on
+      // validation or network errors which we catch below.
+      await submitProfile();
+      // On success, navigate into the app.
+      router.replace("/(tabs)");
       return;
-    }
-    if (!trimmedEmail.includes("@")) {
-      Alert.alert("Check email", "Please enter a valid email address.");
-      return;
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Could not create your account. Please try again.";
+      Alert.alert("Create Account", msg);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -346,146 +420,79 @@ export default function CreateAccount() {
     <SafeAreaView style={styles.screen}>
       <ScrollView
         style={{ alignSelf: "stretch" }}
-        contentContainerStyle={[styles.content, { width: WRAP_W }]}
+        contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.header}>Create Account</Text>
+        <View style={styles.wrap}>
+          <Text style={styles.header}>Create Account</Text>
 
           <Text style={styles.sectionTitle}>Account</Text>
-
-          <TextInput
-            placeholder="Email (optional)"
-            placeholderTextColor={SUBTEXT}
-            style={styles.input}
-            value={emailInput}
-            onChangeText={setEmailInput}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            returnKeyType="next"
-          />
-
-          <TextInput
-            placeholder="Password (min 6 chars)"
-            placeholderTextColor={SUBTEXT}
-            style={styles.input}
-            value={passwordInput}
-            onChangeText={setPasswordInput}
-            secureTextEntry
-            returnKeyType="next"
-          />
-
-          <TextInput
-            placeholder="Confirm Password"
-            placeholderTextColor={SUBTEXT}
-            style={styles.input}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-            returnKeyType="next"
+          <EmailCredentials
+            emailInput={emailInput}
+            setEmailInput={setEmailInput}
+            passwordInput={passwordInput}
+            setPasswordInput={setPasswordInput}
+            confirmPassword={confirmPassword}
+            setConfirmPassword={setConfirmPassword}
+            styles={styles}
+            SUBTEXT={SUBTEXT}
           />
 
           <Text style={styles.sectionTitle}>Your Information</Text>
 
-        {/* Email */}
-        <TextInput
-          placeholder="Email"
-          placeholderTextColor={SUBTEXT}
-          style={styles.input}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-
-        {/* Name row */}
-        <View style={styles.row}>
-          <TextInput
-            placeholder="First Name"
-            placeholderTextColor={SUBTEXT}
-            style={[styles.input, styles.half]}
-            value={first}
-            onChangeText={setFirst}
-            autoCapitalize="words"
+          <NameFields
+            first={first}
+            setFirst={setFirst}
+            last={last}
+            setLast={setLast}
+            styles={styles}
           />
-          <TextInput
-            placeholder="Surname"
-            placeholderTextColor={SUBTEXT}
-            style={[styles.input, styles.half]}
-            value={last}
-            onChangeText={setLast}
-            autoCapitalize="words"
+          <MajorMinorYear
+            major={major}
+            setMajor={setMajor}
+            minor={minor}
+            setMinor={setMinor}
+            yearOfStudy={yearOfStudy}
+            setYearOfStudy={setYearOfStudy}
+            styles={styles}
+            YEAR_OPTIONS={YEAR_OPTIONS}
+            SUBTEXT={SUBTEXT}
           />
 
-          <View style={styles.row}>
-            <TextInput
-              placeholder="Minor (Optional)"
-              placeholderTextColor={SUBTEXT}
-              style={[styles.input, { flex: 2 }]}
-              value={minor}
-              onChangeText={setMinor}
-              returnKeyType="next"
-            />
+          {/* DOB */}
+          <Text style={styles.label}>Date of Birth</Text>
+          <DateOfBirth
+            day={day}
+            setDay={setDay}
+            month={month}
+            setMonth={setMonth}
+            year={year}
+            setYear={setYear}
+            styles={styles}
+            SUBTEXT={SUBTEXT}
+          />
 
-            {/* Year of study */}
-            <Text style={styles.label}>Year of Study</Text>
-            <View style={styles.chipRowWrap}>
-              {YEAR_OPTIONS.map((y) => (
-                <TouchableOpacity
-                  key={y}
+          {/* Gender */}
+          <Text style={styles.label}>Gender</Text>
+          <View style={styles.chipRow}>
+            {GENDER_OPTIONS.map((g) => (
+              <TouchableOpacity
+                key={g}
+                style={[styles.chip, gender === g && styles.chipActive]}
+                onPress={() =>
+                  setGender((prev) => (prev === g ? "" : (g as any)))
+                }
+              >
+                <Text
                   style={[
-                    styles.chip,
-                    yearOfStudy === y && styles.chipActive,
+                    styles.chipText,
+                    gender === g && styles.chipTextActive,
                   ]}
-                  onPress={() =>
-                    setYearOfStudy((prev) => (prev === y ? "" : y))
-                  }
                 >
-                  <Text
-                    style={[
-                      styles.chipText,
-                      yearOfStudy === y && styles.chipTextActive,
-                    ]}
-                  >
-                    {y}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Age split into Day / Month / Year */}
-          <Text style={styles.label}>Age</Text>
-          <View style={styles.row}>
-            <TextInput
-              placeholder="DD"
-              placeholderTextColor={SUBTEXT}
-              style={[styles.input, styles.third]}
-              keyboardType="number-pad"
-              maxLength={2}
-              value={day}
-              onChangeText={(t) => setDay(t.replace(/[^0-9]/g, ""))}
-              returnKeyType="next"
-            />
-            <TextInput
-              placeholder="MM"
-              placeholderTextColor={SUBTEXT}
-              style={[styles.input, styles.third]}
-              keyboardType="number-pad"
-              maxLength={2}
-              value={month}
-              onChangeText={(t) => setMonth(t.replace(/[^0-9]/g, ""))}
-              returnKeyType="next"
-            />
-            <TextInput
-              placeholder="YYYY"
-              placeholderTextColor={SUBTEXT}
-              style={[styles.input, styles.third]}
-              keyboardType="number-pad"
-              maxLength={4}
-              value={year}
-              onChangeText={(t) => setYear(t.replace(/[^0-9]/g, ""))}
-              returnKeyType="next"
-            />
+                  {g}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
           <TouchableOpacity
@@ -521,7 +528,6 @@ export default function CreateAccount() {
             )}
           </TouchableOpacity>
 
-          {/* When the form is disabled show a small hint about what's required */}
           {!isFormValid ? (
             <Text style={{ color: SUBTEXT, textAlign: "center", marginTop: 6 }}>
               {hasManualCreds
@@ -534,92 +540,6 @@ export default function CreateAccount() {
             By creating an account, you agree to our Terms and{"\n"}Conditions.
           </Text>
         </View>
-
-        <TextInput
-          placeholder="Major"
-          placeholderTextColor={SUBTEXT}
-          style={styles.input}
-          value={major}
-          onChangeText={setMajor}
-        />
-
-        <TextInput
-          placeholder="Minor"
-          placeholderTextColor={SUBTEXT}
-          style={styles.input}
-          value={minor}
-          onChangeText={setMinor}
-        />
-
-        {/* DOB */}
-        <Text style={styles.label}>Date of Birth</Text>
-        <View style={styles.row}>
-          <TextInput
-            placeholder="DD"
-            placeholderTextColor={SUBTEXT}
-            style={[styles.input, styles.third]}
-            keyboardType="number-pad"
-            maxLength={2}
-            value={day}
-            onChangeText={(t) => setDay(t.replace(/[^0-9]/g, ""))}
-          />
-          <TextInput
-            placeholder="MM"
-            placeholderTextColor={SUBTEXT}
-            style={[styles.input, styles.third]}
-            keyboardType="number-pad"
-            maxLength={2}
-            value={month}
-            onChangeText={(t) => setMonth(t.replace(/[^0-9]/g, ""))}
-          />
-          <TextInput
-            placeholder="YYYY"
-            placeholderTextColor={SUBTEXT}
-            style={[styles.input, styles.third]}
-            keyboardType="number-pad"
-            maxLength={4}
-            value={year}
-            onChangeText={(t) => setYear(t.replace(/[^0-9]/g, ""))}
-          />
-        </View>
-
-        {/* Gender */}
-        <Text style={styles.label}>Gender</Text>
-        <View style={styles.chipRow}>
-          {GENDER_OPTIONS.map((g) => (
-            <TouchableOpacity
-              key={g}
-              style={[
-                styles.chip,
-                gender === g && styles.chipActive,
-              ]}
-              onPress={() =>
-                setGender((prev) => (prev === g ? "" : (g as any)))
-              }
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  gender === g && styles.chipTextActive,
-                ]}
-              >
-                {g}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <TouchableOpacity
-          style={[styles.btn, { width: WRAP_W }]}
-          activeOpacity={0.9}
-          onPress={onCreate}
-        >
-          <Text style={styles.btnText}>Create Account</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.terms}>
-          By creating an account, you agree to our Terms and{"\n"}Conditions.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -628,15 +548,24 @@ export default function CreateAccount() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+    flexDirection: "column",
+    justifyContent: "flex-start",
     backgroundColor: BG,
-    alignItems: "center",
-    paddingTop: Platform.select({ ios: 8, android: 8, web: 24 }),
+    paddingTop: Platform.select({ ios: 12, android: 12, web: 24 }),
   },
+
   content: {
-    alignItems: "stretch",
-    gap: 12,
+    alignContent: "center",
+    alignItems: "center",
     paddingBottom: 24,
   },
+
+  wrap: {
+    width: "90%",
+    alignSelf: "center",
+    gap: 12,
+  },
+
   header: {
     alignSelf: "center",
     fontSize: 18,
@@ -644,6 +573,7 @@ const styles = StyleSheet.create({
     color: TEXT,
     marginBottom: 6,
   },
+
   sectionTitle: {
     fontSize: 22,
     fontWeight: "800",
@@ -655,7 +585,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: SUBTEXT,
     marginTop: 6,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   row: {
     flexDirection: "row",
@@ -673,10 +603,13 @@ const styles = StyleSheet.create({
   half: {
     flexBasis: "48%",
   },
+
   third: {
-    flexBasis: (WRAP_W - 24) / 3,
+    width: "30%",
+    flexBasis: "40%",
     flexGrow: 0,
   },
+
   chipRow: {
     flexDirection: "row",
     gap: 10,
@@ -686,6 +619,118 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
+  },
+  navBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginBottom: 6,
+  },
+  navItem: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    minWidth: 64,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  navItemActive: {
+    backgroundColor: MAROON,
+  },
+  navText: {
+    color: TEXT,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  navTextActive: {
+    color: "#fff",
+    fontWeight: "800",
+  },
+  yearToggle: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 6,
+  },
+  yearToggleActive: {
+    borderWidth: 1,
+    borderColor: MAROON,
+  },
+  yearToggleText: {
+    color: TEXT,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  caret: {
+    color: SUBTEXT,
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  yearListItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    marginBottom: 6,
+  },
+  yearSelectorWrap: {
+    position: "relative",
+    width: "100%",
+  },
+  yearListContainer: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
+    zIndex: 50,
+    elevation: 8,
+    maxHeight: 220,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+  },
+  modalBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.25)",
+  },
+  modalWrapper: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  modalPanel: {
+    width: "100%",
+    maxHeight: 360,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
   },
   chip: {
     paddingHorizontal: 14,
@@ -711,15 +756,15 @@ const styles = StyleSheet.create({
   btn: {
     backgroundColor: MAROON,
     paddingVertical: 16,
-    borderRadius: 999,
+    borderRadius: 100,
     alignItems: "center",
     marginTop: 8,
+    width: WRAP_W * 1.5, // increased width (50% larger)
+    alignSelf: "center",
+    maxWidth: "100%",
   },
-  btnText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+
   terms: {
     color: SUBTEXT,
     textAlign: "center",

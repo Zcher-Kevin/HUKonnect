@@ -19,13 +19,22 @@ async function checkAllUsers() {
      console.log(`\n用户 ${index + 1}:`);
      console.log(`- 邮箱: ${user.email}`);
      console.log(`- 姓名: ${user.firstName} ${user.lastName}`);
+  console.log(`- 性别: ${user.gender || 'unspecified'}`);
     });
 
     // 特别查询 sarah@hu.edu
     console.log('\n=== 特别查询 sarah@hu.edu ===');
     const sarah = await User.findOne({ email: 'sarah@hu.edu' });
     if (sarah) {
-      console.log(`找到用户, she is born in ${sarah.birthDate} and now ${sarah.age} years old.`);
+      const bd = sarah.birthdate ? new Date(sarah.birthdate) : null;
+      let age = null;
+      if (bd) {
+        const today = new Date();
+        age = today.getFullYear() - bd.getFullYear();
+        const m = today.getMonth() - bd.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < bd.getDate())) age--;
+      }
+      console.log(`找到用户, she is born in ${bd} and now ${age} years old. gender=${sarah.gender || 'unspecified'}`);
     } else {
       console.log('❌ 未找到邮箱为 sarah@hu.edu 的用户');
     }

@@ -1,6 +1,6 @@
 // app/user/[id].tsx
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -22,6 +22,9 @@ import {
   toggleFollow,
   CURRENT_USER_ID,
 } from "../lib/followStore";
+import axios from "axios";
+import { getItem as storageGetItem } from "../lib/storage";
+import { API_BASE } from "../lib/config";
 import { chat, ME_ID } from "../lib/chatStore";
 
 const BG = "#FFF7F7";
@@ -36,7 +39,8 @@ const WRAP_W = Math.min(420, W * 0.92);
 const START_HOUR = 7;
 const END_HOUR = 20;
 const ROW_H = 40;
-const DAYS = ["Thu", "Fri", "Sat", "Sun", "Mon"];
+// Weekday labels for the small profile preview. Show full week from Monday to Sunday.
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 type EventItem = {
   title: string;
@@ -48,23 +52,89 @@ type EventItem = {
 
 const DUMMY_EVENTS: Record<string, EventItem[]> = {
   charlotte: [
-    { title: "Physics Lecture", color: "#CFE2FF", startMins: 9 * 60, endMins: 10 * 60, dayIdx: 0 },
-    { title: "Group Study", color: "#B2F2E8", startMins: 11 * 60, endMins: 12 * 60, dayIdx: 0 },
-    { title: "Free Slot", color: "#F4ECFF", startMins: 14 * 60, endMins: 15 * 60, dayIdx: 0 },
-    { title: "Math Class", color: "#CFE2FF", startMins: 16 * 60, endMins: 17 * 60, dayIdx: 0 },
-    { title: "Art Workshop", color: "#FFD6A5", startMins: 18 * 60, endMins: 19 * 60, dayIdx: 2 },
+    {
+      title: "Physics Lecture",
+      color: "#CFE2FF",
+      startMins: 9 * 60,
+      endMins: 10 * 60,
+      dayIdx: 0,
+    },
+    {
+      title: "Group Study",
+      color: "#B2F2E8",
+      startMins: 11 * 60,
+      endMins: 12 * 60,
+      dayIdx: 0,
+    },
+    {
+      title: "Free Slot",
+      color: "#F4ECFF",
+      startMins: 14 * 60,
+      endMins: 15 * 60,
+      dayIdx: 0,
+    },
+    {
+      title: "Math Class",
+      color: "#CFE2FF",
+      startMins: 16 * 60,
+      endMins: 17 * 60,
+      dayIdx: 0,
+    },
+    {
+      title: "Art Workshop",
+      color: "#FFD6A5",
+      startMins: 18 * 60,
+      endMins: 19 * 60,
+      dayIdx: 2,
+    },
   ],
   "sam-patel": [
-    { title: "Quantum Seminar", color: "#CFE2FF", startMins: 11 * 60, endMins: 12 * 60, dayIdx: 1 },
-    { title: "Basketball Practice", color: "#FFADAD", startMins: 17 * 60, endMins: 18 * 60, dayIdx: 3 },
+    {
+      title: "Quantum Seminar",
+      color: "#CFE2FF",
+      startMins: 11 * 60,
+      endMins: 12 * 60,
+      dayIdx: 1,
+    },
+    {
+      title: "Basketball Practice",
+      color: "#FFADAD",
+      startMins: 17 * 60,
+      endMins: 18 * 60,
+      dayIdx: 3,
+    },
   ],
   "sam-hitchens": [
-    { title: "History Reading Group", color: "#E5C6FF", startMins: 10 * 60, endMins: 11 * 60 + 30, dayIdx: 0 },
-    { title: "Study Session", color: "#B2F2E8", startMins: 15 * 60, endMins: 16 * 60, dayIdx: 2 },
+    {
+      title: "History Reading Group",
+      color: "#E5C6FF",
+      startMins: 10 * 60,
+      endMins: 11 * 60 + 30,
+      dayIdx: 0,
+    },
+    {
+      title: "Study Session",
+      color: "#B2F2E8",
+      startMins: 15 * 60,
+      endMins: 16 * 60,
+      dayIdx: 2,
+    },
   ],
   muller: [
-    { title: "Chemistry Lab", color: "#FFD6A5", startMins: 13 * 60, endMins: 15 * 60, dayIdx: 0 },
-    { title: "Study Group", color: "#B2F2E8", startMins: 10 * 60, endMins: 11 * 60, dayIdx: 2 },
+    {
+      title: "Chemistry Lab",
+      color: "#FFD6A5",
+      startMins: 13 * 60,
+      endMins: 15 * 60,
+      dayIdx: 0,
+    },
+    {
+      title: "Study Group",
+      color: "#B2F2E8",
+      startMins: 10 * 60,
+      endMins: 11 * 60,
+      dayIdx: 2,
+    },
   ],
 };
 
@@ -82,13 +152,80 @@ export default function UserProfileScreen() {
 
   useStoreVersion();
 
+  // Allow fetching a remote person when the local in-memory store doesn't
+  // contain the searched user. We prefer local store when available.
+  const [remotePerson, setRemotePerson] = useState<Person | null>(null);
+  const [remoteSchedule, setRemoteSchedule] = useState<EventItem[] | null>(
+    null
+  );
+
   const person: Person | null = useMemo(() => {
+    if (remotePerson) return remotePerson;
     if (!id) return null;
     return getPerson(id) ?? null;
+  }, [id, remotePerson]);
+
+  // Fetch user from backend if not available locally.
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        if (!id) return;
+        // If a local person exists, skip remote fetch.
+        const local = getPerson(id);
+        if (local) return;
+
+        const token = await storageGetItem("token");
+        const res = await axios.get(`${API_BASE}/api/users/${id}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          timeout: 10000,
+        });
+
+        const u = res?.data?.user;
+        if (!u) return;
+
+        const mapped: Person = {
+          id: String(u._id || u.id || u.username),
+          name:
+            u.firstName ||
+            u.username ||
+            `${u.firstName || ""} ${u.lastName || ""}`.trim() ||
+            "Student",
+          major: u.major || "",
+          bio: u.bio || "",
+          avatar: u.profilePicture || null,
+          followers: u.followers || 0,
+          following: u.following || 0,
+          scheduleVisible: !!u.schedule,
+        };
+        if (mounted) {
+          setRemotePerson(mapped);
+          // store schedule if present (map to local EventItem shape when necessary)
+          if (Array.isArray(u.schedule) && u.schedule.length) {
+            // Assume backend schedule items are already in the expected shape
+            // (id, title, color, startMins, endMins, recurrence, dayIdx/date).
+            setRemoteSchedule(u.schedule);
+          }
+        }
+      } catch (e) {
+        // ignore errors — UI already has graceful fallbacks
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const displayName = person?.name || "Student";
-  const events: EventItem[] = person ? DUMMY_EVENTS[person.id] || [] : [];
+  // Prefer a fetched remote schedule when available. Fall back to demo events
+  // (used for local in-memory people) so the preview shows something.
+  const events: EventItem[] =
+    remoteSchedule && remoteSchedule.length
+      ? remoteSchedule
+      : person
+      ? DUMMY_EVENTS[person.id] || []
+      : [];
   const showSchedule = person?.scheduleVisible ?? true;
 
   const isMe = person?.id === CURRENT_USER_ID;
@@ -172,9 +309,7 @@ export default function UserProfileScreen() {
             <Image source={{ uri: person.avatar }} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.avatarPlaceholder]}>
-              <Text style={styles.avatarInitial}>
-                {displayName.charAt(0)}
-              </Text>
+              <Text style={styles.avatarInitial}>{displayName.charAt(0)}</Text>
             </View>
           )}
 
@@ -186,15 +321,13 @@ export default function UserProfileScreen() {
           </Text>
 
           <Text style={styles.meta}>
-            {(person?.followers ?? 0)} Followers   {(person?.following ?? 0)} Following
+            {person?.followers ?? 0} Followers {person?.following ?? 0}{" "}
+            Following
           </Text>
 
           {canFollow && (
             <TouchableOpacity
-              style={[
-                styles.followBtn,
-                following && styles.followBtnActive,
-              ]}
+              style={[styles.followBtn, following && styles.followBtnActive]}
               onPress={handleToggleFollow}
               activeOpacity={0.9}
             >
@@ -213,6 +346,9 @@ export default function UserProfileScreen() {
         {/* Schedule or hidden */}
         {showSchedule ? (
           <View style={[styles.previewCard, { width: WRAP_W }]}>
+            <Text style={styles.scheduleSubtitle}>{`${DAYS[0]} - ${
+              DAYS[DAYS.length - 1]
+            }`}</Text>
             <View style={styles.daysHeader}>
               {DAYS.map((d) => (
                 <Text key={d} style={styles.dayLabel}>
@@ -236,10 +372,7 @@ export default function UserProfileScreen() {
                     ).map((h, idx) => (
                       <View
                         key={h}
-                        style={[
-                          styles.row,
-                          idx % 2 === 0 && styles.altRow,
-                        ]}
+                        style={[styles.row, idx % 2 === 0 && styles.altRow]}
                       >
                         {dayIdx === 0 && (
                           <Text style={styles.timeLabel}>
@@ -250,10 +383,8 @@ export default function UserProfileScreen() {
                     ))}
 
                     {eventsForDay(dayIdx).map((e, i) => {
-                      const top =
-                        ((e.startMins / 60) - START_HOUR) * ROW_H;
-                      const height =
-                        ((e.endMins - e.startMins) / 60) * ROW_H;
+                      const top = (e.startMins / 60 - START_HOUR) * ROW_H;
+                      const height = ((e.endMins - e.startMins) / 60) * ROW_H;
                       const selectedStyle = isSelected(e)
                         ? styles.eventBlockSelected
                         : null;
@@ -262,25 +393,20 @@ export default function UserProfileScreen() {
                         <TouchableOpacity
                           key={i}
                           activeOpacity={0.8}
-                          onPress={() =>
-                            setSelected(
-                              isSelected(e) ? null : e
-                            )
-                          }
+                          onPress={() => setSelected(isSelected(e) ? null : e)}
                           style={[
                             styles.eventBlock,
                             {
                               top,
                               height,
                               backgroundColor: e.color,
+                              // Slight transparency so preview blocks are softer visually
+                              opacity: isSelected(e) ? 1 : 0.92,
                             },
                             selectedStyle,
                           ]}
                         >
-                          <Text
-                            style={styles.eventTitle}
-                            numberOfLines={2}
-                          >
+                          <Text style={styles.eventTitle} numberOfLines={2}>
                             {e.title}
                           </Text>
                         </TouchableOpacity>
@@ -322,9 +448,7 @@ export default function UserProfileScreen() {
           activeOpacity={0.9}
           onPress={handleInvite}
         >
-          <Text style={styles.ghostBtnText}>
-            Invite to study session
-          </Text>
+          <Text style={styles.ghostBtnText}>Invite to study session</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -474,6 +598,22 @@ const styles = StyleSheet.create({
   hiddenText: {
     fontSize: 13,
     color: SUB,
+  },
+  scheduleSubtitle: {
+    textAlign: "center",
+    color: SUB,
+    fontSize: 12,
+    marginBottom: 6,
+    fontWeight: "600",
+  },
+  selectedHint: {
+    marginTop: 8,
+    color: SUB,
+    textAlign: "center",
+  },
+  eventBlockSelected: {
+    borderWidth: 2,
+    borderColor: MAROON,
   },
   primaryBtn: {
     marginTop: 12,

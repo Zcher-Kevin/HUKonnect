@@ -4,7 +4,6 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
   username: {
     type: String,
-    // Required only for local auth users. OAuth users may not have a username
     required: function() { return this.authProvider === 'local'; },
     unique: true,
     sparse: true,
@@ -12,7 +11,6 @@ const userSchema = new mongoose.Schema({
     minlength: [3, 'Username must be at least 3 characters long'],
     maxlength: [30, 'Username cannot exceed 30 characters']
   },
-  // Email (optional for legacy accounts) - used for login and linking
   email: {
     type: String,
     trim: true,
@@ -20,16 +18,9 @@ const userSchema = new mongoose.Schema({
     unique: true,
     sparse: true,
   },
-  // Password hash (only used for local auth)
   password: {
     type: String,
     required: false,
-  },
-  // Google OAuth fields
-  googleId: {
-    type: String,
-    unique: true,
-    sparse: true
   },
   authProvider: {
     type: String,
@@ -38,64 +29,27 @@ const userSchema = new mongoose.Schema({
   },
   firstName: {
     type: String,
-    required: false, // optional for OAuth users
     trim: true,
     maxlength: [50, 'First name cannot exceed 50 characters']
   },
   lastName: {
     type: String,
-    required: false, // optional for OAuth users
     trim: true,
     maxlength: [50, 'Last name cannot exceed 50 characters']
   },
-  major: {
+  yearOfStudy: {
     type: String,
-    trim: true,
-    maxlength: [100, 'Major cannot exceed 100 characters']
-  },
-  minor:{
-    type: String,
-    trim: true,
-    maxlength: [100, 'Minor cannot exceed 100 characters']
-  },
-  birthDate: { 
-    type: Date 
-  },
-  year: {
-    type: String,
-    enum: ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate', 'Other'],
-    default: 'Freshman'
-  },
-  bio: {
-    type: String,
-    maxlength: [500, 'Bio cannot exceed 500 characters']
-  },
-  interests: [{
-    type: String,
-    trim: true
-  }],
-  profilePicture: {
-    type: String,
-    default: null
+    enum: ['one', 'two', 'three', 'four', 'master', 'phd', 'other'],
+    default: 'one'
   },
   isActive: {
     type: Boolean,
     default: true
   },
-  lastLogin: {
+  lastlogin: {
     type: Date,
     default: null
   },
-  joinedGroups: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Group'
-  }],
-  eventsAttending: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Event'
-  }]
-  ,
-  // Personal schedule: array of lightweight event objects saved by the user
   schedule: [{
     id: { type: String },
     title: { type: String, trim: true, maxlength: 200 },
@@ -104,8 +58,26 @@ const userSchema = new mongoose.Schema({
     endMins: { type: Number, min: 0, max: 24 * 60 },
     recurrence: { type: String, enum: ['once', 'weekly'], default: 'weekly' },
     dayIdx: { type: Number, min: 0, max: 6, required: false },
-    date: { type: String, required: false }, // ISO date string for one-time events
+    date: { type: String, required: false },
   }],
+  major: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Major cannot exceed 100 characters']
+  },
+  minor: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Minor cannot exceed 100 characters']
+  },
+  gender: {
+    type: String,
+    enum: ['male', 'female', 'non-binary', 'other', 'unspecified'],
+    default: 'unspecified'
+  },
+  birthdate: {
+    type: Date
+  }
 }, {
   timestamps: true
 });
@@ -115,23 +87,7 @@ userSchema.index({ email: 1 }, { unique: true, sparse: true });
 userSchema.index({ username: 1 }, { unique: true, sparse: true });
 
 // Virtual field to get user age
-userSchema.virtual("age").get(function () {
-  if (!this.birthDate) return null;
-
-  const today = new Date();
-  const birthDate = new Date(this.birthDate);
-  
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const monthDiff = today.getMonth() - birthDate.getMonth();
-
-  // 如果还没过生日，年龄减 1
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age--;
-  }
-
-  return age;
-});
-userSchema.set("toJSON", { virtuals: true });
+// No virtuals exposed by default - keep the schema minimal and explicit.
 
 // Hash password before saving (only for local auth)
 userSchema.pre('save', async function(next) {
@@ -157,10 +113,27 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 
 // Instance method to get public profile (exclude sensitive data)
 userSchema.methods.toPublicJSON = function() {
-  const user = this.toObject();
-  delete user.password;
-  delete user.__v;
-  return user;
+  // Only expose the permitted public fields
+  const u = this.toObject({ getters: true });
+  const publicFields = {
+    _id: u._id,
+    username: u.username,
+    email: u.email,
+    authProvider: u.authProvider,
+    firstName: u.firstName,
+    lastName: u.lastName,
+    yearOfStudy: u.yearOfStudy,
+    isActive: u.isActive,
+    lastlogin: u.lastlogin,
+    schedule: u.schedule || [],
+    gender: u.gender,
+    major: u.major,
+    minor: u.minor,
+    birthdate: u.birthdate,
+    createdAt: u.createdAt,
+    updatedAt: u.updatedAt,
+  };
+  return publicFields;
 };
 
 module.exports = mongoose.model('User', userSchema);

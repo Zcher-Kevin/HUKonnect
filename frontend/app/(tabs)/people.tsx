@@ -12,14 +12,14 @@ import {
   Dimensions,
   Platform,
   Image,
+  Alert,
 } from "react-native";
 import { router } from "expo-router";
-import {
-  getPeople,
-  isFollowing,
-  useStoreVersion,
-  Person,
-} from "../lib/followStore";
+import { isFollowing, useStoreVersion, Person } from "../lib/followStore";
+import { subscribeAuthChange } from "../lib/authEvents";
+import axios from "axios";
+import { getItem as storageGetItem } from "../lib/storage";
+import { API_BASE } from "../lib/config";
 
 const BG = "#FFF7F7";
 const TEXT = "#231F20";
@@ -32,38 +32,193 @@ const WRAP_W = Math.min(900, W * 0.98);
 
 export default function PeopleScreen() {
   const [query, setQuery] = useState("");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // re-render when follow / visibility / settings change
   useStoreVersion();
+  // Server-backed users
+  const [users, setUsers] = useState<Person[]>([]);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const all = getPeople();
+  // Fetch users from backend (search + paging). Maps server user shape to local Person.
+  const fetchLock = React.useRef(false);
+  const fetchUsers = async (opts?: { page?: number; reset?: boolean }) => {
+    const p = opts?.page ?? page;
+    const reset = !!opts?.reset;
+    try {
+      if (fetchLock.current) return; // avoid overlapping fetches
+      fetchLock.current = true;
+      if (p === 1) setLoading(true);
+      const token = await storageGetItem("token");
+      const res = await axios.get(`${API_BASE}/api/users/search`, {
+        params: {
+          query: query || undefined,
+          page: p,
+          limit,
+          excludeSelf: true,
+        },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        timeout: 15000,
+      });
+      const serverUsers = res.data?.users || [];
+      // map server user to local Person-like shape
+      const mapped: Person[] = serverUsers.map((u: any) => ({
+        id: String(u._id || u.id || u.username),
+        name:
+          u.firstName ||
+          u.username ||
+          `${u.firstName || ""} ${u.lastName || ""}`.trim() ||
+          u.username ||
+          "User",
+        major: u.major || "",
+        bio: u.bio || "",
+        // Use explicit profilePicture when available. Otherwise fall back to a
+        // single, neutral app-local icon (do not generate random avatars).
+        // We intentionally avoid per-user random images to match the requested UX.
+        avatar: u.profilePicture || null,
+        followers: u.followers || 0,
+        following: u.following || 0,
+        scheduleVisible: !!u.schedule,
+      }));
 
-  const data: Person[] = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const anyFollowed = all.some((p) => isFollowing(p.id));
+      // Exclude the current user from results so you don't see yourself.
+      const filtered = currentUserId
+        ? mapped.filter((m) => m.id !== currentUserId)
+        : mapped;
 
-    if (!q) {
-      if (!anyFollowed) return [];
-      return all.filter((p) => isFollowing(p.id));
+      if (reset || p === 1) setUsers(filtered);
+      else setUsers((prev) => [...prev, ...filtered]);
+
+      const pagination = res.data?.pagination;
+      if (pagination) setTotalPages(pagination.pages || 1);
+    } catch (err) {
+      console.error("fetchUsers error", err);
+    } finally {
+      fetchLock.current = false;
+      setLoading(false);
+      setRefreshing(false);
     }
+  };
 
-    // search mode
-    const matches = all.filter((p) => {
-      const name = p.name.toLowerCase();
-      const major = p.major.toLowerCase();
-      return name.includes(q) || major.includes(q);
+  // Debounce search input
+  React.useEffect(() => {
+    const t = setTimeout(() => {
+      setPage(1);
+      fetchUsers({ page: 1, reset: true });
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  // Fetch current user id so we can exclude the current user from lists/selections
+  React.useEffect(() => {
+    // On mount read current token, fetch profile and initial users
+    let mounted = true;
+    (async () => {
+      try {
+        const token = await storageGetItem("token");
+        if (!mounted) return;
+        if (!token) {
+          setCurrentUserId(null);
+          // still try to fetch users (will 401 and leave empty)
+          fetchUsers({ page: 1, reset: true });
+          return;
+        }
+        const res = await axios.get(`${API_BASE}/api/users/profile`, {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 10000,
+        });
+        const uid = res?.data?.user?._id || res?.data?.user?.id || null;
+        if (mounted) setCurrentUserId(uid ? String(uid) : null);
+        // fetch first page of users now that we have token
+        fetchUsers({ page: 1, reset: true });
+      } catch (err: any) {
+        console.warn("Could not fetch current user id", err?.message || err);
+        if (mounted) setCurrentUserId(null);
+        fetchUsers({ page: 1, reset: true });
+      }
+    })();
+
+    // Subscribe to auth change events (fired when login/register stores token)
+    const unsub = subscribeAuthChange(() => {
+      (async () => {
+        try {
+          const token = await storageGetItem("token");
+          if (!mounted) return;
+          if (token) {
+            try {
+              const res = await axios.get(`${API_BASE}/api/users/profile`, {
+                headers: { Authorization: `Bearer ${token}` },
+                timeout: 10000,
+              });
+              const uid = res?.data?.user?._id || res?.data?.user?.id || null;
+              if (mounted) setCurrentUserId(uid ? String(uid) : null);
+            } catch (e) {
+              if (mounted) setCurrentUserId(null);
+            }
+          } else {
+            if (mounted) setCurrentUserId(null);
+          }
+          // reload users
+          if (mounted) {
+            setUsers([]);
+            setPage(1);
+            fetchUsers({ page: 1, reset: true });
+          }
+        } catch (e) {}
+      })();
     });
+    // cleanup on unmount
+    return () => {
+      mounted = false;
+      try {
+        unsub();
+      } catch (e) {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    const followed = matches.filter((p) => isFollowing(p.id));
-    const others = matches.filter((p) => !isFollowing(p.id));
+  // When we learn the current user id, refresh the first page so the
+  // current user is excluded from results even if the initial fetch ran
+  // before we knew the id.
+  React.useEffect(() => {
+    if (currentUserId === undefined) return;
+    // fetch first page and reset so filtering takes effect
+    fetchUsers({ page: 1, reset: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId]);
 
+  // Load next page when `page` changes (except page 1 which is handled by search effect)
+  React.useEffect(() => {
+    if (page === 1) return;
+    fetchUsers({ page });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  // Data ordering: show followed first
+  const data: Person[] = useMemo(() => {
+    const followed = users.filter((p) => isFollowing(p.id));
+    const others = users.filter((p) => !isFollowing(p.id));
     return [...followed, ...others];
-  }, [all, query]);
+  }, [users]);
 
   const renderItem = ({ item }: { item: Person }) => (
     <View style={styles.card}>
       <View style={styles.leftRow}>
-        <Image source={{ uri: item.avatar }} style={styles.avatar} />
+        {item.avatar ? (
+          <Image source={{ uri: item.avatar }} style={styles.avatar} />
+        ) : (
+          // Local neutral icon (use project icon as a neutral user avatar).
+          <Image
+            source={require("../../assets/images/icon.png")}
+            style={styles.avatar}
+            resizeMode="cover"
+          />
+        )}
         <View>
           <Text style={styles.name}>{item.name}</Text>
           <Text style={styles.major}>{item.major}</Text>
@@ -109,6 +264,10 @@ export default function PeopleScreen() {
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 24 }}
+          onEndReached={() => {
+            if (!loading && page < totalPages) setPage((p) => p + 1);
+          }}
+          onEndReachedThreshold={0.5}
         />
       </View>
     </SafeAreaView>

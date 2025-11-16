@@ -12,6 +12,7 @@ import Icon from "./../../components/icon";
 import { router } from "expo-router";
 import axios from "axios";
 import { setItem as storageSetItem } from "../lib/storage";
+import { emitAuthChange } from "../lib/authEvents";
 import { isValidEmail } from "../lib/validators";
 import { API_BASE } from "../lib/config";
 
@@ -41,7 +42,7 @@ export default function LoginScreen() {
       setBusy(true);
       const res = await axios.post(
         `${API_BASE}/api/auth/login`,
-        { email: email.trim(), password },
+        { email: email.trim(), password, remember: true },
         { timeout: 15000 }
       );
       // Log full response to console for debugging (do NOT show tokens in UI)
@@ -50,6 +51,9 @@ export default function LoginScreen() {
       if (token) {
         // Use storage wrapper which falls back to localStorage on web
         await storageSetItem("token", token);
+        try {
+          emitAuthChange();
+        } catch (e) {}
         router.replace("/(tabs)");
       } else {
         // Show a helpful alert and log the full response
@@ -116,7 +120,7 @@ export default function LoginScreen() {
           );
         }}
       >
-      <Icon />
+        <Icon />
 
         <View style={{ width: "100%" }}>
           <Text style={styles.title}>Welcome to HUKonnect</Text>

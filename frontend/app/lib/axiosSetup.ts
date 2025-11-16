@@ -49,11 +49,27 @@ export default function setupAxiosLogging() {
       } catch (e) {}
       return res;
     },
-    (err) => {
+    async (err) => {
       try {
         // eslint-disable-next-line no-console
         console.error('[axios] response error', err?.response?.status, err?.config?.url, err?.message);
       } catch (e) {}
+
+      // If server returned 429 (rate limit), implement a small retry with
+      // exponential backoff (client-side best-effort). Don't retry more
+      // than 3 times to avoid creating request storms.
+      const config = err?.config;
+      if (config && err?.response && err.response.status === 429) {
+        config.__retryCount = config.__retryCount || 0;
+        const MAX_RETRIES = 3;
+        if (config.__retryCount < MAX_RETRIES) {
+          config.__retryCount += 1;
+          const delay = Math.pow(2, config.__retryCount) * 250; // 250ms, 500ms, 1000ms
+          await new Promise((res) => setTimeout(res, delay));
+          return axios(config);
+        }
+      }
+
       return Promise.reject(err);
     }
   );
