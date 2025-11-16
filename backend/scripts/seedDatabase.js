@@ -1,7 +1,5 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
-const Group = require('../models/Group');
-const Event = require('../models/Event');
 require('dotenv').config();
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/hukonnect';
@@ -16,8 +14,9 @@ const seedData = async () => {
 
     console.log('Connected to MongoDB');
 
-  // Clear existing user data only. Groups and Events are disabled and
-  // preserved in the database (we don't remove them here to avoid data loss).
+  // Clear existing user data only. Groups and Events have been removed
+  // from the API and their documents are preserved in the database to
+  // avoid accidental data loss. We only clear users here.
   await User.deleteMany({});
   console.log('Cleared existing user data');
 
