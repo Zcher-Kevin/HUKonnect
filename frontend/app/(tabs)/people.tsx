@@ -137,7 +137,10 @@ export default function PeopleScreen() {
         // fetch first page of users now that we have token
         fetchUsers({ page: 1, reset: true });
       } catch (err: any) {
-        console.warn("Could not fetch current user id", err?.message || err);
+        console.warn(
+          "Could not fetch current user id",
+          (err as any)?.message || err
+        );
         if (mounted) setCurrentUserId(null);
         fetchUsers({ page: 1, reset: true });
       }

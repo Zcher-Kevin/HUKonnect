@@ -75,11 +75,11 @@ export default function LoginScreen() {
               ? serverMessage
               : JSON.stringify(serverMessage)
           }`
-        : err?.message || "Unable to login";
+        : (err as any)?.message || "Unable to login";
 
       // Log full error/response to console for debugging
       console.error("Login error details:", {
-        message: err?.message,
+        message: (err as any)?.message,
         status: status,
         responseData: err?.response?.data,
       });
@@ -100,8 +100,8 @@ export default function LoginScreen() {
       console.log("Ping API response", res.data);
       Alert.alert("API Ping", JSON.stringify(res.data));
     } catch (err: any) {
-      console.error("Ping API error", err?.message || err);
-      Alert.alert("API Ping failed", err?.message || "Network error");
+      console.error("Ping API error", (err as any)?.message || err);
+      Alert.alert("API Ping failed", (err as any)?.message || "Network error");
     }
   };
   return (

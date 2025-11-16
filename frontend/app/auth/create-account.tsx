@@ -251,7 +251,8 @@ export default function email() {
           } catch (e) {}
         } catch (regErr: any) {
           const status = regErr?.response?.status;
-          const serverMsg = regErr?.response?.data?.message || regErr?.message;
+          const serverMsg =
+            regErr?.response?.data?.message || (regErr as any)?.message;
           throw new Error(
             status ? `Status ${status}: ${serverMsg}` : serverMsg
           );
@@ -314,7 +315,8 @@ export default function email() {
           } catch (e) {}
         } catch (regErr: any) {
           const status = regErr?.response?.status;
-          const serverMsg = regErr?.response?.data?.message || regErr?.message;
+          const serverMsg =
+            regErr?.response?.data?.message || (regErr as any)?.message;
           throw new Error(
             status ? `Status ${status}: ${serverMsg}` : serverMsg
           );
@@ -384,7 +386,7 @@ export default function email() {
     } catch (err: any) {
       const msg =
         err?.response?.data?.message ||
-        err?.message ||
+        (err as any)?.message ||
         "Could not create your account. Please try again.";
       Alert.alert("Create Account", msg);
     } finally {

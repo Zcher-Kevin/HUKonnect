@@ -52,7 +52,7 @@ export default function setupAxiosLogging() {
     async (err) => {
       try {
         // eslint-disable-next-line no-console
-        console.error('[axios] response error', err?.response?.status, err?.config?.url, err?.message);
+        console.error('[axios] response error', err?.response?.status, err?.config?.url, (err as any)?.message);
       } catch (e) {}
 
       // If server returned 429 (rate limit), implement a small retry with

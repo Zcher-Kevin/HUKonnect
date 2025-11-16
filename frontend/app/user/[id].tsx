@@ -243,14 +243,30 @@ export default function UserProfileScreen() {
   };
 
   // Invite flow: uses selected slot if present, otherwise generic.
-  const handleInvite = () => {
+  const handleInvite = async () => {
     if (!person) return;
 
     let body: string;
-
-    // NOTE FRONTEND-ONLY:
-    // Replace "another student" with actual sender name once you have auth.
-    const senderName = "another student";
+    const token = await storageGetItem("token");
+    // Request the current authenticated user's profile so we can display
+    // their real name as the sender. Previously this fetched the target
+    // user's record (using `id`) which caused the sender name to show the
+    // recipient's username instead of the sender's name.
+    let senderName = "Another student";
+    try {
+      const res = await axios.get(`${API_BASE}/api/users/profile`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        timeout: 10000,
+      });
+      const u = res?.data?.user;
+      if (u) {
+        const first = u.firstName || u.username || "";
+        const last = u.lastName || "";
+        senderName = `${first}${last ? ` ${last}` : ""}`.trim();
+      }
+    } catch (e) {
+      // keep fallback senderName
+    }
 
     if (selected) {
       const dayName = DAYS[selected.dayIdx];

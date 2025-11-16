@@ -16,11 +16,10 @@ const seedData = async () => {
 
     console.log('Connected to MongoDB');
 
-    // Clear existing data
-    await User.deleteMany({});
-    await Group.deleteMany({});
-    await Event.deleteMany({});
-    console.log('Cleared existing data');
+  // Clear existing user data only. Groups and Events are disabled and
+  // preserved in the database (we don't remove them here to avoid data loss).
+  await User.deleteMany({});
+  console.log('Cleared existing user data');
 
     // Create sample users (minimal fields matching the current User model)
     const users = await User.create([

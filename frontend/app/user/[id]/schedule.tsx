@@ -66,6 +66,17 @@ const makeDay = (i: number) => {
 const dowLabel = (d: Date) => d.toLocaleDateString(undefined, { weekday: "short" });
 
 export default function ReadonlySchedule() {
+  // While backend events/groups are disabled, show a simple notice instead
+  const EVENTS_ENABLED = false;
+  if (!EVENTS_ENABLED) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: BG }}>
+        <View style={[styles.header, { justifyContent: 'center' }]}>
+          <Text style={styles.headerTitle}>Schedule feature is currently disabled</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
   const { id } = useLocalSearchParams<{ id: string }>();
   const person = PEOPLE[id || "charlotte"] || PEOPLE.charlotte;
 

@@ -6,52 +6,11 @@ const { body, validationResult } = require('express-validator');
 
 const router = express.Router();
 
-// Get all groups
-router.get('/', auth, async (req, res) => {
-  try {
-    const { category, course, page = 1, limit = 10 } = req.query;
-    const skip = (page - 1) * limit;
-
-    let query = { isPublic: true, isActive: true };
-
-    // Filter by category
-    if (category) {
-      query.category = category;
-    }
-
-    // Filter by course
-    if (course) {
-      query.course = { $regex: course, $options: 'i' };
-    }
-
-    const groups = await Group.find(query)
-      .populate('creator', 'firstName lastName username')
-      .populate('members.user', 'firstName lastName username')
-      .skip(skip)
-      .limit(parseInt(limit))
-      .sort({ createdAt: -1 });
-
-    const total = await Group.countDocuments(query);
-
-    res.json({
-      success: true,
-      groups,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit)
-      }
-    });
-
-  } catch (error) {
-    console.error('Get groups error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get groups',
-      error: error.message
-    });
-  }
+// NOTE: Groups feature has been disabled. All endpoints in this router
+// return 410 Gone to make the change reversible without deleting code.
+// This keeps the server stable while the frontend is updated to hide group UI.
+router.use((req, res) => {
+  res.status(410).json({ success: false, message: 'Groups feature disabled' });
 });
 
 // Create new group

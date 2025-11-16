@@ -72,6 +72,15 @@ const dowLabel = (d: Date) =>
   d.toLocaleDateString(undefined, { weekday: "short" });
 
 export default function ScheduleScreen() {
+  // Toggle: disable schedule/events UI while backend feature is disabled.
+  const EVENTS_ENABLED = false;
+  if (!EVENTS_ENABLED) {
+    return (
+      <View style={[styles.header, { flex: 1, justifyContent: 'center' }]}>
+        <Text style={[styles.headerTitle, { textAlign: 'center' }]}>Schedule / Events feature is currently disabled.</Text>
+      </View>
+    );
+  }
   const [events, setEvents] = useState<EventItem[]>([
     {
       id: "e1",
