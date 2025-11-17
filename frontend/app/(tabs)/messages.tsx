@@ -12,6 +12,7 @@ import {
   Dimensions,
   Platform,
 } from "react-native";
+import { TabTransitionView } from "../../components/TabTransitionView";
 import { router } from "expo-router";
 import { useThreads } from "../lib/chatStore";
 
@@ -32,7 +33,7 @@ export default function MessagesListScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <View style={[styles.inner, { width: WRAP_W }]}>
+      <TabTransitionView style={[styles.inner, { width: WRAP_W }]}>
         <Text style={styles.title}>Messages</Text>
 
         {threads.length === 0 && (
@@ -71,7 +72,7 @@ export default function MessagesListScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 24 }}
         />
-      </View>
+      </TabTransitionView>
     </SafeAreaView>
   );
 }

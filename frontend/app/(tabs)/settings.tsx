@@ -12,10 +12,11 @@ import {
   Text,
   StyleSheet,
   Switch,
-  TouchableOpacity,
   Dimensions,
   Platform,
 } from "react-native";
+import { BouncyButton } from "../../components/BouncyButton";
+import { TabTransitionView } from "../../components/TabTransitionView";
 import { router } from "expo-router";
 import {
   getCurrentScheduleVisible,
@@ -60,7 +61,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <View style={[styles.wrap, { width: WRAP_W }]}>
+      <TabTransitionView style={[styles.wrap, { width: WRAP_W }]}>
         <Text style={styles.title}>Settings</Text>
 
         {/* Schedule visibility */}
@@ -96,23 +97,21 @@ export default function SettingsScreen() {
         </View>
 
         {/* Change profile info */}
-        <TouchableOpacity
+        <BouncyButton
           style={styles.primaryBtn}
-          activeOpacity={0.9}
           onPress={goEditProfile}
         >
           <Text style={styles.primaryText}>Change profile information</Text>
-        </TouchableOpacity>
+        </BouncyButton>
 
         {/* Log out */}
-        <TouchableOpacity
+        <BouncyButton
           style={styles.logoutBtn}
-          activeOpacity={0.9}
           onPress={logout}
         >
           <Text style={styles.logoutText}>Log out</Text>
-        </TouchableOpacity>
-      </View>
+        </BouncyButton>
+      </TabTransitionView>
     </SafeAreaView>
   );
 }

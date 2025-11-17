@@ -12,6 +12,7 @@ import {
   Dimensions,
   Platform,
 } from "react-native";
+import { BouncyButton } from "../../components/BouncyButton";
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -352,10 +353,9 @@ export default function UserProfileScreen() {
           </Text>
 
           {canFollow && (
-            <TouchableOpacity
+            <BouncyButton
               style={[styles.followBtn, following && styles.followBtnActive]}
               onPress={handleToggleFollow}
-              activeOpacity={0.9}
             >
               <Text
                 style={[
@@ -365,7 +365,7 @@ export default function UserProfileScreen() {
               >
                 {following ? "Unfollow" : "Follow"}
               </Text>
-            </TouchableOpacity>
+            </BouncyButton>
           )}
         </View>
 
@@ -461,21 +461,19 @@ export default function UserProfileScreen() {
         )}
 
         {/* Actions */}
-        <TouchableOpacity
+        <BouncyButton
           style={[styles.primaryBtn, { width: WRAP_W }]}
-          activeOpacity={0.9}
           onPress={handleMessage}
         >
           <Text style={styles.primaryBtnText}>Message</Text>
-        </TouchableOpacity>
+        </BouncyButton>
 
-        <TouchableOpacity
+        <BouncyButton
           style={[styles.ghostBtn, { width: WRAP_W }]}
-          activeOpacity={0.9}
           onPress={handleInvite}
         >
           <Text style={styles.ghostBtnText}>Invite to study session</Text>
-        </TouchableOpacity>
+        </BouncyButton>
       </ScrollView>
     </SafeAreaView>
   );

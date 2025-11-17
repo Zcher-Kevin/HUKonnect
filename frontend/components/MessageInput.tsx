@@ -1,6 +1,10 @@
 import React from "react";
-import { View, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import { 
+  View,
+  TextInput,
+  StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { BouncyButton } from "./BouncyButton";
 
 interface Props {
   text: string;
@@ -23,13 +27,12 @@ export default function MessageInput({
         onChangeText={setText}
         placeholder={editing ? "Edit message..." : "Message..."}
       />
-      <TouchableOpacity
+      <BouncyButton
         onPress={onSend}
         style={styles.sendButton}
-        accessibilityLabel="send"
       >
         <Ionicons name="send" size={20} color="#fff" />
-      </TouchableOpacity>
+      </BouncyButton>
     </View>
   );
 }
