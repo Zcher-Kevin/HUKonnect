@@ -23,12 +23,19 @@ const TEXT = "#231F20";
 const SUBTEXT = "#7A3F3F";
 const INPUT_BG = "#F5EAEA";
 
+// Small set of color choices for schedule items. Kept as a constant so both
+// the color picker and default events use the same palette.
+const COLOR_OPTIONS = ["#CFE2FF", "#B2F2E8", "#E5C6FF", "#FFD6A5", "#FFADAD"];
+// Color swatch sizing constants — change these to adjust the rendered swatch size.
+const COLOR_SWATCH_SIZE = 28; // default swatch size (px)
+const COLOR_SWATCH_SELECTED_SCALE = 1.25; // scale factor for the selected swatch
+
 const { width: W, height: H } = Dimensions.get("window");
 
 // full-day grid, vertical scroll in each column
 const START_HOUR = 0;
 const END_HOUR = 24;
-const HOUR_HEIGHT = 56;
+const HOUR_HEIGHT = 54;
 const COL_W = Math.min(280, Math.max(200, W * 0.78));
 
 type EventItem = {
@@ -72,11 +79,12 @@ const dowLabel = (d: Date) =>
   d.toLocaleDateString(undefined, { weekday: "short" });
 
 export default function ScheduleScreen() {
+  // Default demo events (will be replaced by persisted schedule when present)
   const [events, setEvents] = useState<EventItem[]>([
     {
       id: "e1",
       title: "Math Class",
-      color: "#CFE2FF",
+      color: COLOR_OPTIONS[0],
       startMins: 18 * 60,
       endMins: 19 * 60,
       recurrence: "weekly",
@@ -85,7 +93,7 @@ export default function ScheduleScreen() {
     {
       id: "e2",
       title: "Study Group",
-      color: "#B2F2E8",
+      color: COLOR_OPTIONS[1],
       startMins: 8 * 60 + 15,
       endMins: 9 * 60 + 15,
       recurrence: "weekly",
@@ -94,7 +102,7 @@ export default function ScheduleScreen() {
     {
       id: "e3",
       title: "Art Workshop (One-time)",
-      color: "#FFD6A5",
+      color: COLOR_OPTIONS[3],
       startMins: 10 * 60,
       endMins: 11 * 60 + 30,
       recurrence: "once",
@@ -110,7 +118,7 @@ export default function ScheduleScreen() {
   const [date, setDate] = useState(iso(today));
   const [start, setStart] = useState("09:00");
   const [end, setEnd] = useState("10:00");
-  const [color, setColor] = useState("#CFE2FF");
+  const [color, setColor] = useState(COLOR_OPTIONS[0]);
 
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => makeDay(i)),
@@ -334,7 +342,7 @@ export default function ScheduleScreen() {
               </View>
 
               <ScrollView
-                ref={(el) => (scrollRefs.current[i] = el)}
+                ref={(el) => { scrollRefs.current[i] = el; }}
                 style={{ height: Math.max(H * 0.65, 420) }}
                 contentContainerStyle={{ height: GRID_HEIGHT }}
                 showsVerticalScrollIndicator
@@ -375,8 +383,7 @@ export default function ScheduleScreen() {
                             top,
                             height,
                             backgroundColor: e.color,
-                            width: COL_W - 24,
-                            left: 12,
+                            width: COL_W ,
                             // Slight transparency so schedule blocks are less visually heavy
                             opacity: 0.92,
                           },
@@ -537,23 +544,29 @@ export default function ScheduleScreen() {
               </View>
             </View>
 
+            {/* Color selection of the time slot created */}
             <Text style={styles.label}>Color</Text>
             <View style={styles.colorRow}>
-              {["#CFE2FF", "#B2F2E8", "#E5C6FF", "#FFD6A5", "#FFADAD"].map(
-                (c) => (
+              {COLOR_OPTIONS.map((c) => {
+                const isSelected = color === c;
+                const size = COLOR_SWATCH_SIZE * COLOR_SWATCH_SELECTED_SCALE
+                return (
                   <TouchableOpacity
                     key={c}
                     onPress={() => setColor(c)}
                     style={[
                       styles.colorSwatch,
                       {
+                        width: size,
+                        height: size,
+                        borderRadius: Math.max(6, Math.round(size * 0.2)),
                         backgroundColor: c,
-                        borderColor: color === c ? TEXT : "transparent",
+                        borderColor: isSelected ? TEXT : "transparent",
                       },
                     ]}
                   />
-                )
-              )}
+                );
+              })}
             </View>
 
             <View style={styles.modalBtns}>
@@ -633,12 +646,12 @@ const styles = StyleSheet.create({
 
   event: {
     position: "absolute",
-    borderRadius: 10,
+    borderRadius: 0,
     padding: 0,
     zIndex: 1,
     overflow: "hidden",
   },
-  eventContent: { padding: 8, zIndex: 2 },
+  eventContent: { paddingLeft: 10, paddingTop: 2, zIndex: 2 },
   eventTitle: { fontSize: 13, fontWeight: "700", color: "#1d1d1f" },
   eventTime: { fontSize: 11, color: "#3a3a3c" },
   hint: { fontSize: 10, color: "#444", marginTop: 2 },
@@ -721,7 +734,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row" },
 
   colorRow: { flexDirection: "row", gap: 10 },
-  colorSwatch: { width: 28, height: 28, borderRadius: 6, borderWidth: 2 },
+  colorSwatch: { borderRadius: 1, borderWidth: 2, overflow: "hidden" },
 
   modalBtns: { flexDirection: "row", marginTop: 8 },
   btn: {

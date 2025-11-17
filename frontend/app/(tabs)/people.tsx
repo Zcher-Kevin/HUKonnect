@@ -248,7 +248,7 @@ export default function PeopleScreen() {
 
         <TextInput
           style={styles.search}
-          placeholder="Search by name or major"
+          placeholder="Search by name"
           placeholderTextColor={SUB}
           value={query}
           onChangeText={setQuery}

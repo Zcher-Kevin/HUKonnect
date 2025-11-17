@@ -11,7 +11,6 @@ export default function TabsLayout() {
   return (
     <Tabs
       // add top padding so page content doesn't sit flush to the top edge
-      sceneContainerStyle={{ paddingTop: 12 }}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: MAROON,

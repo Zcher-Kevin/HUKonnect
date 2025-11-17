@@ -69,7 +69,7 @@ export default function ProfileCard({ user: userProp }: { user?: any }) {
   return (
     <>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Schedule</Text>
+        <Text style={styles.headerTitle}>My Profile</Text>
       </View>
       <View style={styles.userCardWrap}>
         <View style={styles.avatar}>
