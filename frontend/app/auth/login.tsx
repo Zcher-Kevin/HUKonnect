@@ -4,9 +4,9 @@ import {
   SafeAreaView,
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
 } from "react-native";
+import { BouncyButton } from "../../components/BouncyButton";
 import { TextInput, ActivityIndicator, Alert } from "react-native";
 import Icon from "./../../components/icon";
 import { router } from "expo-router";
@@ -144,7 +144,7 @@ export default function LoginScreen() {
             secureTextEntry
           />
 
-          <TouchableOpacity
+          <BouncyButton
             style={styles.btn}
             onPress={onLogin}
             disabled={busy}
@@ -154,7 +154,7 @@ export default function LoginScreen() {
             ) : (
               <Text style={styles.btnText}>Login</Text>
             )}
-          </TouchableOpacity>
+          </BouncyButton>
 
           {/* Web-only fallback native button to diagnose web event delivery */}
           {Platform.OS === "web" ? (
@@ -171,12 +171,12 @@ export default function LoginScreen() {
             </div>
           ) : null}
 
-          <TouchableOpacity
+          <BouncyButton
             style={[styles.btn, { marginTop: 8, backgroundColor: "#4A90E2" }]}
             onPress={pingApi}
           >
             <Text style={styles.btnText}>Ping API</Text>
-          </TouchableOpacity>
+          </BouncyButton>
 
           {Platform.OS === "web" ? (
             <div style={{ marginTop: 8 }}>
@@ -205,14 +205,14 @@ export default function LoginScreen() {
           </Text>
 
           {/* Link to create account */}
-          <TouchableOpacity
+          <BouncyButton
             style={[styles.btn, { backgroundColor: "#999" }]}
             onPress={() => {
               router.push("/auth/create-account");
             }}
           >
             <Text style={styles.btnText}>Create account</Text>
-          </TouchableOpacity>
+          </BouncyButton>
         </View>
       </View>
     </SafeAreaView>

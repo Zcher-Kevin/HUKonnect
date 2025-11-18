@@ -7,13 +7,14 @@ import {
   Text,
   TextInput,
   FlatList,
-  TouchableOpacity,
   StyleSheet,
   Dimensions,
   Platform,
   Image,
   Alert,
 } from "react-native";
+import { BouncyButton } from "../../components/BouncyButton";
+import { TabTransitionView } from "../../components/TabTransitionView";
 import { router } from "expo-router";
 import { isFollowing, useStoreVersion, Person } from "../lib/followStore";
 import { subscribeAuthChange } from "../lib/authEvents";
@@ -231,19 +232,18 @@ export default function PeopleScreen() {
         </View>
       </View>
 
-      <TouchableOpacity
+      <BouncyButton
         style={styles.viewBtn}
-        activeOpacity={0.9}
         onPress={() => router.push(`/user/${item.id}`)}
       >
         <Text style={styles.viewText}>View</Text>
-      </TouchableOpacity>
+      </BouncyButton>
     </View>
   );
 
   return (
     <SafeAreaView style={styles.screen}>
-      <View style={[styles.inner, { width: WRAP_W }]}>
+      <TabTransitionView style={[styles.inner, { width: WRAP_W }]}>
         <Text style={styles.title}>Find Students</Text>
 
         <TextInput
@@ -272,7 +272,7 @@ export default function PeopleScreen() {
           }}
           onEndReachedThreshold={0.5}
         />
-      </View>
+      </TabTransitionView>
     </SafeAreaView>
   );
 }

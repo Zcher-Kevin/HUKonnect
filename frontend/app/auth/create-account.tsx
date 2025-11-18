@@ -11,7 +11,6 @@ import {
   Text,
   ActivityIndicator,
   TextInput,
-  TouchableOpacity,
   TouchableWithoutFeedback,
   Modal,
   FlatList,
@@ -20,6 +19,7 @@ import {
   Platform,
   Alert,
 } from "react-native";
+import { BouncyButton } from "../../components/BouncyButton";
 import { router, useLocalSearchParams } from "expo-router";
 import EmailCredentials from "./sections/EmailCredentials";
 import NameFields from "./sections/NameFields";
@@ -478,7 +478,7 @@ export default function email() {
           <Text style={styles.label}>Gender</Text>
           <View style={styles.chipRow}>
             {GENDER_OPTIONS.map((g) => (
-              <TouchableOpacity
+              <BouncyButton
                 key={g}
                 style={[styles.chip, gender === g && styles.chipActive]}
                 onPress={() =>
@@ -493,16 +493,15 @@ export default function email() {
                 >
                   {g}
                 </Text>
-              </TouchableOpacity>
+              </BouncyButton>
             ))}
           </View>
 
-          <TouchableOpacity
+          <BouncyButton
             style={[
               styles.btn,
               { width: WRAP_W, opacity: busy || !isFormValid ? 0.6 : 1 },
             ]}
-            activeOpacity={0.9}
             onPress={async () => {
               if (!isFormValid) {
                 // Provide a friendly hint when user tries to submit an invalid form
@@ -528,7 +527,7 @@ export default function email() {
             ) : (
               <Text style={styles.btnText}>Create Account</Text>
             )}
-          </TouchableOpacity>
+          </BouncyButton>
 
           {!isFormValid ? (
             <Text style={{ color: SUBTEXT, textAlign: "center", marginTop: 6 }}>
