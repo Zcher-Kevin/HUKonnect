@@ -4,8 +4,6 @@ const BG = '#FFF7F7';
 const TEXT = '#231F20';
 const SUB = '#7A6F6F';
 const ACCENT = '#A2172C';
-const BUBBLE_ME = '#D9FDD3';
-const BUBBLE_THEM = '#FFFFFF';
 
 export default StyleSheet.create({
   screen: { flex: 1, backgroundColor: BG },
