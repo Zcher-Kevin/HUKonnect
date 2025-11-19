@@ -1,10 +1,4 @@
-import {
-  View,
-  Image,
-  StyleSheet,
-  Dimensions,
-  Platform,
-} from "react-native";
+import { View, Image, StyleSheet, Dimensions, Platform } from "react-native";
 
 const BG = "#FFF7F7";
 
@@ -39,7 +33,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    elevation: 2,
     marginTop: 10,
   },
 });
