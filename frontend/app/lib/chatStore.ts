@@ -28,6 +28,7 @@ export type Message = {
   createdAt: number;
   editedAt?: number;
   replyToId?: string;
+  clientTempId?: string;
 };
 
 export type Thread = {
@@ -120,6 +121,7 @@ function normalizeMessage(m: any): Message {
     text: m.text ?? m.body ?? m.message ?? '',
     createdAt: createdAt || Date.now(),
     replyToId: m.replyToId ?? m.reply_to_id ?? m.replyTo ?? undefined,
+    clientTempId: m.clientTempId ?? m.client_temp_id ?? undefined,
   };
   // Cache names when present
   try { if (out.senderId && out.senderName) peerNameCache.set(String(out.senderId), out.senderName); } catch (e) {}
@@ -267,21 +269,38 @@ function upsertServerMessage(serverMsg: Message) {
   // If server id already present, update/replace it
   const existingIdx = arr.findIndex((x) => x.id === serverMsg.id);
   if (existingIdx !== -1) {
+    try { console.debug('[chatStore] upsert replace existing by id', { chatId, serverId: serverMsg.id, idx: existingIdx }); } catch (e) {}
     arr[existingIdx] = serverMsg;
   } else {
+    // If server included a clientTempId, prefer matching the temp message by that id.
+    if (serverMsg.clientTempId) {
+      const tempByClientIdx = arr.findIndex((x) => x.id === String(serverMsg.clientTempId));
+      if (tempByClientIdx !== -1) {
+        try { console.debug('[chatStore] upsert replace temp by clientTempId', { chatId, tempIdx: tempByClientIdx, tempId: arr[tempByClientIdx]?.id, serverId: serverMsg.id }); } catch (e) {}
+        arr[tempByClientIdx] = serverMsg;
+        // sort and return early
+        arr.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+        return;
+      }
+    }
     // Try to find an optimistic temp match: same sender, same text, and
     // very close timestamps (within 5 seconds). If found, replace it.
     const tempIdx = arr.findIndex((x) => {
       if (!x.id.startsWith('temp-')) return false;
-      if (x.senderId !== serverMsg.senderId) return false;
+      // Allow matching when temp message uses the placeholder ME_ID or
+      // when senderId matches the server message. This helps when the
+      // optimistic message was created before currentUserId was known.
+      if (!(x.senderId === serverMsg.senderId || x.senderId === ME_ID)) return false;
       if (!x.text || !serverMsg.text) return false;
       if (x.text.trim() !== serverMsg.text.trim()) return false;
       const dt = Math.abs((x.createdAt || 0) - (serverMsg.createdAt || 0));
       return dt < 5000; // 5 seconds
     });
     if (tempIdx !== -1) {
+      try { console.debug('[chatStore] upsert replace temp', { chatId, tempIdx, tempId: arr[tempIdx]?.id, serverId: serverMsg.id }); } catch (e) {}
       arr[tempIdx] = serverMsg;
     } else {
+      try { console.debug('[chatStore] upsert push new', { chatId, serverId: serverMsg.id }); } catch (e) {}
       arr.push(serverMsg);
     }
   }
@@ -293,6 +312,8 @@ function upsertServerMessage(serverMsg: Message) {
 // PUBLIC CHAT API
 
 let socket: any = null;
+// Recent sends cache to prevent duplicate rapid POSTs for same chat+text
+const recentSends = new Map<string, { text: string; tempId: string; ts: number }>();
 
 async function ensureSocket() {
   if (socket) return socket;
@@ -388,6 +409,17 @@ export const chat = {
     opts?: { replyToId?: string; chatIdOverride?: string }
   ): Message {
     const chatId = opts?.chatIdOverride || `dm:${peerId}`;
+    const now = Date.now();
+    const recentKey = `${chatId}::${String(text || '')}`;
+    const recent = recentSends.get(recentKey);
+    if (recent && now - recent.ts < 1500) {
+      // A very recent send of the same text to the same chat occurred —
+      // avoid sending a duplicate request. If the optimistic message
+      // still exists in the store, return it so the caller sees a message.
+      const existing = (store.messagesByChat[chatId] || []).find((m) => m.id === recent.tempId);
+      if (existing) return existing;
+      // otherwise fallthrough to create a new optimistic message
+    }
     ensureThread(peerId, peerName);
 
     // optimistic local message
@@ -395,15 +427,31 @@ export const chat = {
     const tempMsg: Message = {
       id: tempId,
       chatId,
-      senderId: ME_ID,
+      // Use the resolved current user id when available so optimistic
+      // messages can be matched to the server message by senderId.
+      senderId: currentUserId || ME_ID,
       senderName: currentUserDisplayName || 'You',
       text,
       createdAt: Date.now(),
       ...(opts?.replyToId && { replyToId: opts?.replyToId }),
     };
 
+    try {
+      // Debug: log optimistic insertion with temp id and sender info
+      console.debug('[chatStore] optimistic insert', { tempId, chatId, senderId: tempMsg.senderId, text: (text || '').slice(0, 64), ts: Date.now() });
+    } catch (e) {}
+
     if (!store.messagesByChat[chatId]) store.messagesByChat[chatId] = [];
     store.messagesByChat[chatId].push(tempMsg);
+    // record recent send to prevent duplicates within a short window
+    try {
+      recentSends.set(`${chatId}::${String(text || '')}`, { text, tempId, ts: Date.now() });
+      // schedule cleanup after 5s to avoid memory growth
+      setTimeout(() => {
+        const ent = recentSends.get(`${chatId}::${String(text || '')}`);
+        if (ent && ent.tempId === tempId) recentSends.delete(`${chatId}::${String(text || '')}`);
+      }, 5000);
+    } catch (e) {}
     upsertThreadFromMessage(tempMsg, peerId, peerName);
     emit();
 
@@ -414,23 +462,25 @@ export const chat = {
         await ensureSocket(); // ensure we can receive broadcasts
         const res = await axios.post(
           `${API_BASE}/api/chats/${peerId}/messages`,
-          { text, replyToId: opts?.replyToId },
+          { text, replyToId: opts?.replyToId, clientTempId: tempId },
           { headers: token ? { Authorization: `Bearer ${token}` } : {} }
         );
         const m = res.data && res.data.message ? res.data.message : null;
         if (m) {
-          // replace temp message with server message
-          const arr = store.messagesByChat[chatId] || [];
-          const idx = arr.findIndex((x) => x.id === tempId);
+          // Normalize server message and upsert it into the store. Use
+          // upsertServerMessage to avoid duplicates when the same message
+          // may also be delivered via the socket (race between HTTP
+          // response and socket event).
           const serverMsg = normalizeMessage(m);
+          try {
+            console.debug('[chatStore] http response recv', { tempId, serverId: serverMsg.id, chatId: serverMsg.chatId, senderId: serverMsg.senderId, text: (serverMsg.text || '').slice(0,64), ts: Date.now() });
+          } catch (e) {}
           if (serverMsg.senderId && serverMsg.senderName) peerNameCache.set(String(serverMsg.senderId), serverMsg.senderName);
-          if (idx !== -1) {
-            arr[idx] = serverMsg;
-          } else {
-            arr.push(serverMsg);
-          }
+          upsertServerMessage(serverMsg);
           upsertThreadFromMessage(serverMsg, peerId, peerName);
           emit();
+          // remove recent send marker for this chat+text
+          try { recentSends.delete(`${chatId}::${String(text || '')}`); } catch (e) {}
         }
       } catch (e) {
         console.warn('Failed to send message to server', (e as any)?.message || e);

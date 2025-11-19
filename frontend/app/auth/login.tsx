@@ -94,16 +94,7 @@ export default function LoginScreen() {
       setBusy(false);
     }
   };
-  const pingApi = async () => {
-    try {
-      const res = await axios.get(`${API_BASE}/api/test`, { timeout: 5000 });
-      console.log("Ping API response", res.data);
-      Alert.alert("API Ping", JSON.stringify(res.data));
-    } catch (err: any) {
-      console.error("Ping API error", (err as any)?.message || err);
-      Alert.alert("API Ping failed", (err as any)?.message || "Network error");
-    }
-  };
+
   return (
     <SafeAreaView style={styles.screen}>
       <View
@@ -169,35 +160,6 @@ export default function LoginScreen() {
                 Login (web native)
               </button>
             </div>
-          ) : null}
-
-          <BouncyButton
-            style={[styles.btn, { marginTop: 8, backgroundColor: "#4A90E2" }]}
-            onPress={pingApi}
-          >
-            <Text style={styles.btnText}>Ping API</Text>
-          </BouncyButton>
-
-          {Platform.OS === "web" ? (
-            <div style={{ marginTop: 8 }}>
-              <button
-                id="web-native-ping"
-                onClick={() => {
-                  console.log("native web ping clicked");
-                  pingApi();
-                }}
-              >
-                Ping API (web native)
-              </button>
-            </div>
-          ) : null}
-
-          {/* Development-only debug note to show resolved API_BASE and test credentials */}
-          {typeof __DEV__ !== "undefined" && __DEV__ ? (
-            <Text style={styles.note}>
-              DEV: API_BASE = {API_BASE}
-              {"\n"}Example test accounts: john@hu.edu / password123
-            </Text>
           ) : null}
 
           <Text style={{ textAlign: "center", color: "#231F20", opacity: 0.7 }}>

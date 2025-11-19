@@ -83,8 +83,9 @@ const userSchema = new mongoose.Schema({
 });
 
 // Index for better query performance and uniqueness
-userSchema.index({ email: 1 }, { unique: true, sparse: true });
-userSchema.index({ username: 1 }, { unique: true, sparse: true });
+// Indexes are declared on the path definitions (unique: true + sparse: true)
+// Avoid duplicate index declarations (either use `index()` or `unique` on the field)
+// so we don't trigger Mongoose duplicate index warnings.
 
 // Virtual field to get user age
 // No virtuals exposed by default - keep the schema minimal and explicit.

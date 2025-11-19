@@ -23,7 +23,7 @@ export default function DateOfBirth({
   SUBTEXT,
 }: Props) {
   return (
-    <>
+    <View style={styles.row}>
       <TextInput
         placeholder="DD"
         placeholderTextColor={SUBTEXT}
@@ -51,6 +51,6 @@ export default function DateOfBirth({
         value={year}
         onChangeText={(t) => setYear(t.replace(/[^0-9]/g, ""))}
       />
-    </>
+    </View>
   );
 }

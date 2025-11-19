@@ -537,9 +537,6 @@ export default function email() {
             </Text>
           ) : null}
 
-          <Text style={styles.terms}>
-            By creating an account, you agree to our Terms and{"\n"}Conditions.
-          </Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -596,7 +593,7 @@ const styles = StyleSheet.create({
     backgroundColor: INPUT_BG,
     borderRadius: RADIUS,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 8,
     color: TEXT,
     fontSize: 16,
     flexGrow: 1,
@@ -606,8 +603,8 @@ const styles = StyleSheet.create({
   },
 
   third: {
-    width: "30%",
-    flexBasis: "40%",
+    width: "31%",
+    flexBasis: "31%",
     flexGrow: 0,
   },
 
@@ -625,7 +622,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: "Text",
     borderRadius: 12,
     paddingVertical: 6,
     paddingHorizontal: 8,
@@ -655,7 +652,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: INPUT_BG,
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 12,

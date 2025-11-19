@@ -77,12 +77,20 @@ router.post('/chats/:peerId/messages', auth, asyncHandler(async (req, res) => {
     senderName: names.get(String(saved.senderId)),
     recipientName: names.get(String(saved.recipientId)),
   });
+  // If client supplied a temp id, include it so clients can match optimistic messages
+  try {
+    if (req.body && req.body.clientTempId) payload.clientTempId = String(req.body.clientTempId);
+  } catch (e) {}
 
-  // Broadcast via Socket.IO to both participants (best-effort)
+  // Broadcast via Socket.IO to the recipient (best-effort).
+  // We intentionally avoid broadcasting the created message back to the
+  // sender here because the sender already gets the created message via
+  // the HTTP response. Broadcasting to the sender can create a race with
+  // the client's HTTP response handler and lead to duplicate messages.
   try {
     const io = req.app.get('io');
     if (io) {
-      emitToRooms(io, [`user:${String(saved.senderId)}`, `user:${String(saved.recipientId)}`], 'message', payload);
+      emitToRooms(io, [`user:${String(saved.recipientId)}`], 'message', payload);
     }
   } catch (e) {
     console.warn('Socket broadcast failed:', e && e.message);
@@ -173,7 +181,9 @@ router.patch('/messages/:id', auth, asyncHandler(async (req, res) => {
   const payload = Object.assign({}, saved.toPublicJSON(), { senderName: names.get(String(saved.senderId)) });
   try {
     const io = req.app.get('io');
-    emitToRooms(io, [`user:${String(msg.senderId)}`, `user:${String(msg.recipientId)}`], 'message:edit', payload);
+  // Emit edit to recipient only; sender receives edit confirmation via HTTP
+  // response to avoid duplicate application of the same change.
+  emitToRooms(io, [`user:${String(msg.recipientId)}`], 'message:edit', payload);
   } catch (e) {
     // ignore emit errors
   }
@@ -197,7 +207,9 @@ router.delete('/messages/:id', auth, asyncHandler(async (req, res) => {
     const names = await resolveDisplayNames([msg.senderId]);
     const payload = { id: saved._id, chatId: msg.chatId, senderId: msg.senderId, senderName: names.get(String(msg.senderId)) };
     const io = req.app.get('io');
-    emitToRooms(io, [`user:${String(msg.senderId)}`, `user:${String(msg.recipientId)}`], 'message:delete', payload);
+  // Emit delete to recipient only; sender receives delete confirmation via HTTP
+  // response to avoid duplicate handling on the client.
+  emitToRooms(io, [`user:${String(msg.recipientId)}`], 'message:delete', payload);
   } catch (e) {
     // ignore emit errors
   }
