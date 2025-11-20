@@ -513,11 +513,70 @@ export const chat = {
   remove(chatId: string, messageId: string) {
     const msgs = store.messagesByChat[chatId];
     if (!msgs) return;
-    const idx = msgs.findIndex((x) => x.id === messageId);
+    const idx = msgs.findIndex((x) => x.id === String(messageId));
     if (idx === -1) return;
+
+    // Keep a backup in case delete fails and we need to restore
+    const backup = msgs[idx];
+
+    // If this is an optimistic (temp) message that never persisted, just
+    // remove it locally and return (no server call necessary).
+    if (String(messageId).startsWith('temp-')) {
+      msgs.splice(idx, 1);
+      // update thread metadata
+      const thread = store.threads[chatId];
+      if (thread) {
+        const last = msgs[msgs.length - 1];
+        thread.lastMessage = last ? last.text : undefined;
+        thread.updatedAt = last ? last.createdAt : Date.now();
+      }
+      emit();
+      return;
+    }
+
+    // Optimistically remove the message locally so UI updates immediately.
     msgs.splice(idx, 1);
-    // BACKEND TODO: DELETE /messages/{id}
+    // update thread metadata
+    const thread = store.threads[chatId];
+    if (thread) {
+      const last = msgs[msgs.length - 1];
+      thread.lastMessage = last ? last.text : undefined;
+      thread.updatedAt = last ? last.createdAt : Date.now();
+    }
     emit();
+
+    // Fire-and-forget server delete. If it fails, restore the message and
+    // notify via console.warn. We keep this non-blocking to avoid UI stalls.
+    (async () => {
+      try {
+        const token = (await storageGetItem('token')) as string | null;
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        await axios.delete(`${API_BASE}/api/messages/${messageId}`, { headers });
+        // Success: server will emit 'message:delete' to the recipient(s).
+      } catch (e) {
+        try { console.warn('[chatStore] delete failed, restoring message', messageId, (e as any)?.message || e); } catch (er) {}
+        // Restore backup if still appropriate
+        try {
+          const arr = store.messagesByChat[chatId] || [];
+          // If message not present, re-insert at original index (clamped)
+          const exists = arr.findIndex((x) => x.id === backup.id);
+          if (exists === -1) {
+            const insertAt = Math.min(Math.max(0, idx), arr.length);
+            arr.splice(insertAt, 0, backup);
+            // restore thread metadata
+            const t = store.threads[chatId];
+            if (t) {
+              const last = arr[arr.length - 1];
+              t.lastMessage = last ? last.text : undefined;
+              t.updatedAt = last ? last.createdAt : Date.now();
+            }
+            emit();
+          }
+        } catch (err) {
+          // ignore
+        }
+      }
+    })();
   },
 
   getMessages(chatId: string): Message[] {
