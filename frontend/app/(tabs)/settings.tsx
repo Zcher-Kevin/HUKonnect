@@ -18,6 +18,8 @@ import {
 import { BouncyButton } from "../../components/BouncyButton";
 import { TabTransitionView } from "../../components/TabTransitionView";
 import { router } from "expo-router";
+import { setItem as storageSetItem } from "../lib/storage";
+import { emitAuthChange } from "../lib/authEvents";
 import {
   getCurrentScheduleVisible,
   setCurrentScheduleVisible,
@@ -54,9 +56,14 @@ export default function SettingsScreen() {
   };
 
   const logout = () => {
-    // BACKEND/TODO: clear auth tokens / session server-side.
-    // FRONTEND: navigate back to login.
-    router.replace("/auth/login");
+    // Clear stored token and notify app so in-memory state is reset.
+    (async () => {
+      try {
+        await storageSetItem('token', '');
+      } catch (e) {}
+      try { emitAuthChange(); } catch (e) {}
+      router.replace('/auth/login');
+    })();
   };
 
   return (

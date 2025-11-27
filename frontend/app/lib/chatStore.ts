@@ -54,6 +54,25 @@ const peerNameCache = new Map<string, string>();
 let currentUserDisplayName: string | null = null;
 let currentUserId: string | null = null;
 
+// Clear all in-memory chat state (used on auth changes to avoid leaking
+// data between different logged-in users).
+function clearStore() {
+  // Close any active socket to avoid receiving messages for the previous user
+  try {
+    if (socket) {
+      try { socket.disconnect(); } catch (e) {}
+      socket = null;
+    }
+  } catch (e) {}
+
+  Object.keys(store.messagesByChat).forEach((k) => delete store.messagesByChat[k]);
+  Object.keys(store.threads).forEach((k) => delete store.threads[k]);
+  peerNameCache.clear();
+  currentUserDisplayName = null;
+  currentUserId = null;
+  emit();
+}
+
 async function fetchCurrentUserProfile() {
   try {
     const token = (await storageGetItem('token')) as string | null;
@@ -704,6 +723,9 @@ async function loadThreadsFromServer() {
 // Subscribe to auth changes so when the user logs in we open socket and
 // load their threads so message channels show immediately in the UI.
 subscribeAuthChange(() => {
+  // On auth changes (login/logout) clear previous user's in-memory state
+  // to avoid showing threads/messages from another account.
+  clearStore();
   (async () => {
     try {
       await ensureSocket();
@@ -716,6 +738,8 @@ subscribeAuthChange(() => {
 // On module init, attempt to load threads and connect if token present.
 (async () => {
   try {
+    // On module init: clear any leftover in-memory state (safe-guard)
+    clearStore();
     await ensureSocket();
     await fetchCurrentUserProfile();
     await loadThreadsFromServer();
