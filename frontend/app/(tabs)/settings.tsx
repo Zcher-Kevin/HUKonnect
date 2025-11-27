@@ -59,10 +59,12 @@ export default function SettingsScreen() {
     // Clear stored token and notify app so in-memory state is reset.
     (async () => {
       try {
-        await storageSetItem('token', '');
+        await storageSetItem("token", "");
       } catch (e) {}
-      try { emitAuthChange(); } catch (e) {}
-      router.replace('/auth/login');
+      try {
+        emitAuthChange();
+      } catch (e) {}
+      router.replace("/auth/login");
     })();
   };
 
@@ -76,7 +78,8 @@ export default function SettingsScreen() {
           <View style={styles.textWrap}>
             <Text style={styles.label}>Make schedule visible to others</Text>
             <Text style={styles.help}>
-              When enabled, other students can see your schedule on your profile.
+              When enabled, other students can see your schedule on your
+              profile.
             </Text>
           </View>
           <Switch
@@ -104,18 +107,12 @@ export default function SettingsScreen() {
         </View>
 
         {/* Change profile info */}
-        <BouncyButton
-          style={styles.primaryBtn}
-          onPress={goEditProfile}
-        >
+        <BouncyButton style={styles.primaryBtn} onPress={goEditProfile}>
           <Text style={styles.primaryText}>Change profile information</Text>
         </BouncyButton>
 
         {/* Log out */}
-        <BouncyButton
-          style={styles.logoutBtn}
-          onPress={logout}
-        >
+        <BouncyButton style={styles.logoutBtn} onPress={logout}>
           <Text style={styles.logoutText}>Log out</Text>
         </BouncyButton>
       </TabTransitionView>
