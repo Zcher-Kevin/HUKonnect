@@ -175,6 +175,23 @@ router.get('/search', auth, async (req, res) => {
     // map to public shape
     users = users.map(u => u.toPublicJSON ? u.toPublicJSON() : u);
 
+    // If requester present, fetch their following set so we can mark
+    // which returned users are currently followed by the requester.
+    let currentFollowing = [];
+    if (req.userId) {
+      try {
+        const me = await User.findById(req.userId).select('following');
+        if (me && Array.isArray(me.following)) currentFollowing = me.following.map(String);
+      } catch (e) {
+        currentFollowing = [];
+      }
+    }
+
+    // Annotate each user object with `isFollowed` boolean for client convenience
+    users = users.map(u => {
+      return Object.assign({}, u, { isFollowed: req.userId ? currentFollowing.includes(String(u._id)) : false });
+    });
+
     // Defensive: ensure the requesting user is not present in the returned
     // list. This avoids edge cases where query casting or types cause the
     // $ne filter to miss the requester. It's cheap for paginated pages.
@@ -214,31 +231,63 @@ router.get('/search', auth, async (req, res) => {
   }
 });
 
-// Get user by ID
-router.get('/:id', auth, async (req, res) => {
+// Return the current user's following list (ids)
+router.get('/following', auth, asyncHandler(async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password');
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      user: user.toPublicJSON()
-    });
-
+    if (!req.userId) return sendError(res, 401, 'Not authenticated');
+    const me = await User.findById(req.userId).select('following');
+    if (!me) return sendError(res, 404, 'Current user not found');
+    const following = (me.following || []).map(String);
+    res.json({ success: true, following });
   } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get user',
-      error: error.message
-    });
+    console.error('Get following error', error);
+    res.status(500).json({ success: false, message: 'Failed to get following list', error: error.message });
   }
-});
+}));
+
+// Get user by ID (public). This endpoint intentionally does not require
+// authentication so client UIs can resolve display names for chat headers
+// and previews even when token retrieval is delayed.
+router.get('/:id', asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id).select('-password');
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  res.json({ success: true, user: user.toPublicJSON() });
+}));
+
+// Follow a user
+router.post('/:id/follow', auth, asyncHandler(async (req, res) => {
+  try {
+    const targetId = req.params.id;
+    if (!req.userId) return sendError(res, 401, 'Not authenticated');
+    if (String(req.userId) === String(targetId)) return sendError(res, 400, 'Cannot follow yourself');
+
+    const me = await User.findById(req.userId);
+    if (!me) return sendError(res, 404, 'Current user not found');
+
+    await me.follow(targetId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Follow error', error);
+    res.status(500).json({ success: false, message: 'Failed to follow user', error: error.message });
+  }
+}));
+
+// Unfollow a user
+router.post('/:id/unfollow', auth, asyncHandler(async (req, res) => {
+  try {
+    const targetId = req.params.id;
+    if (!req.userId) return sendError(res, 401, 'Not authenticated');
+    if (String(req.userId) === String(targetId)) return sendError(res, 400, 'Cannot unfollow yourself');
+
+    const me = await User.findById(req.userId);
+    if (!me) return sendError(res, 404, 'Current user not found');
+
+    await me.unfollow(targetId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Unfollow error', error);
+    res.status(500).json({ success: false, message: 'Failed to unfollow user', error: error.message });
+  }
+}));
 
 module.exports = router;

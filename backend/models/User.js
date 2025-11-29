@@ -78,6 +78,12 @@ const userSchema = new mongoose.Schema({
   birthdate: {
     type: Date
   }
+  ,
+  // List of users this user is following (references to other User documents)
+  following: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }]
 }, {
   timestamps: true
 });
@@ -133,8 +139,38 @@ userSchema.methods.toPublicJSON = function() {
     birthdate: u.birthdate,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
+    // Number of users this user follows (useful for UI sorting/summary)
+    followingCount: Array.isArray(u.following) ? u.following.length : 0,
   };
   return publicFields;
+};
+
+// Instance methods for following/unfollowing other users
+userSchema.methods.isFollowing = function(userId) {
+  if (!this.following) return false;
+  return this.following.some((f) => String(f) === String(userId));
+};
+
+userSchema.methods.follow = async function(userId) {
+  if (!userId) return this;
+  if (!this.following) this.following = [];
+  const idStr = String(userId);
+  if (!this.following.some((f) => String(f) === idStr)) {
+    this.following.push(userId);
+    await this.save();
+  }
+  return this;
+};
+
+userSchema.methods.unfollow = async function(userId) {
+  if (!userId || !this.following) return this;
+  const idStr = String(userId);
+  const idx = this.following.findIndex((f) => String(f) === idStr);
+  if (idx !== -1) {
+    this.following.splice(idx, 1);
+    await this.save();
+  }
+  return this;
 };
 
 module.exports = mongoose.model('User', userSchema);

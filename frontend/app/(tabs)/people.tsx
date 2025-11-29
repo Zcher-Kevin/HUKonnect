@@ -16,7 +16,7 @@ import {
 import { BouncyButton } from "../../components/BouncyButton";
 import { TabTransitionView } from "../../components/TabTransitionView";
 import { router } from "expo-router";
-import { isFollowing, useStoreVersion, Person } from "../lib/followStore";
+import { isFollowing, useStoreVersion, Person, setFollowingIds } from "../lib/followStore";
 import { subscribeAuthChange } from "../lib/authEvents";
 import axios from "axios";
 import { getItem as storageGetItem } from "../lib/storage";
@@ -36,7 +36,7 @@ export default function PeopleScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // re-render when follow / visibility / settings change
-  useStoreVersion();
+  const storeVersion = useStoreVersion();
   // Server-backed users
   const [users, setUsers] = useState<Person[]>([]);
   const [page, setPage] = useState(1);
@@ -135,6 +135,18 @@ export default function PeopleScreen() {
         });
         const uid = res?.data?.user?._id || res?.data?.user?.id || null;
         if (mounted) setCurrentUserId(uid ? String(uid) : null);
+        // Initialize following set from server so UI ordering and buttons
+        // reflect server state immediately.
+        try {
+          const resF = await axios.get(`${API_BASE}/api/users/following`, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 8000,
+          });
+          const arr = Array.isArray(resF?.data?.following) ? resF.data.following.map((x: any) => String(x)) : [];
+          setFollowingIds(arr);
+        } catch (e) {
+          // ignore
+        }
         // fetch first page of users now that we have token
         fetchUsers({ page: 1, reset: true });
       } catch (err: any) {
@@ -203,15 +215,19 @@ export default function PeopleScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
-  // Data ordering: show followed first
+  // Data ordering: show followed first (recompute when follow-set changes)
   const data: Person[] = useMemo(() => {
     const followed = users.filter((p) => isFollowing(p.id));
     const others = users.filter((p) => !isFollowing(p.id));
     return [...followed, ...others];
-  }, [users]);
+  }, [users, storeVersion]);
+
+  // How many items at the start of `data` are followed users
+  const followedCount = useMemo(() => users.filter((p) => isFollowing(p.id)).length, [users, storeVersion]);
 
   const renderItem = ({ item }: { item: Person }) => (
-    <View style={styles.card}>
+    <View>
+      <View style={styles.card}>
       <View style={styles.leftRow}>
         {item.avatar ? (
           <Image source={{ uri: item.avatar }} style={styles.avatar} />
@@ -231,13 +247,22 @@ export default function PeopleScreen() {
           </Text>
         </View>
       </View>
+        <BouncyButton
+          style={styles.viewBtn}
+          onPress={() => router.push(`/user/${item.id}`)}
+        >
+          <Text style={styles.viewText}>View</Text>
+        </BouncyButton>
+      </View>
 
-      <BouncyButton
-        style={styles.viewBtn}
-        onPress={() => router.push(`/user/${item.id}`)}
-      >
-        <Text style={styles.viewText}>View</Text>
-      </BouncyButton>
+      {/* Divider between followed and other users */}
+      {followedCount > 0 && followedCount < data.length &&
+        // If this item is the last followed item, render a divider
+        data.indexOf(item) === followedCount - 1 && (
+          <View style={styles.followDividerWrap}>
+            <View style={styles.followDivider} />
+          </View>
+        )}
     </View>
   );
 
@@ -358,5 +383,15 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: 13,
+  },
+  followDividerWrap: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  followDivider: {
+    height: 1,
+    alignSelf: 'stretch',
+    backgroundColor: '#E6E6E6',
+    borderRadius: 1,
   },
 });

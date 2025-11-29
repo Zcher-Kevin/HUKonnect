@@ -1,6 +1,9 @@
 // app/lib/followStore.ts
 
 import { useEffect, useState } from "react";
+import axios from 'axios';
+import { getItem as storageGetItem } from './storage';
+import { API_BASE } from './config';
 
 export type Person = {
   id: string;
@@ -59,6 +62,7 @@ const PEOPLE: Person[] = [
 export const CURRENT_USER_ID = "charlotte";
 
 // in-memory follow state (session only)
+// in-memory follow state (session only)
 let following = new Set<string>();
 
 // in-memory settings for current user
@@ -83,11 +87,45 @@ export function getPerson(id: string): Person | undefined {
 export function isFollowing(id: string): boolean {
   return following.has(id);
 }
-export function toggleFollow(id: string): void {
-  if (following.has(id)) following.delete(id);
-  else following.add(id);
-  // BACKEND/TODO: sync follow change
-  emit();
+
+// Initialize the following set from server-provided ids (call once on load)
+export function setFollowingIds(ids: string[]) {
+  try {
+    following = new Set((ids || []).map((x) => String(x)));
+    emit();
+  } catch (e) {}
+}
+
+// Toggle follow state with optimistic update and server sync.
+export async function toggleFollow(id: string): Promise<void> {
+  if (!id) return;
+  const currently = following.has(id);
+  // optimistic update
+  try {
+    if (currently) following.delete(id);
+    else following.add(id);
+    emit();
+  } catch (e) {}
+
+  // Fire request to backend; revert on failure
+  try {
+    const token = await storageGetItem('token');
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    if (!currently) {
+      // follow
+      await axios.post(`${API_BASE}/api/users/${id}/follow`, {}, { headers });
+    } else {
+      // unfollow
+      await axios.post(`${API_BASE}/api/users/${id}/unfollow`, {}, { headers });
+    }
+  } catch (err) {
+    // revert optimistic change
+    try {
+      if (currently) following.add(id);
+      else following.delete(id);
+      emit();
+    } catch (e) {}
+  }
 }
 
 // Schedule visibility (current user)

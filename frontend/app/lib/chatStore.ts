@@ -355,6 +355,17 @@ async function ensureSocket() {
     socket.on('message', (m: any) => {
       try {
         const msg = normalizeMessage(m);
+        // Ignore any messages that don't involve the current user. This
+        // prevents showing chats that belong to other accounts when the
+        // socket connects before we know `currentUserId`.
+        try {
+          const msgSender = String(msg.senderId || '');
+          const msgRecipient = String(msg.recipientId || '');
+          if (currentUserId && msgSender !== currentUserId && msgRecipient !== currentUserId) {
+            // Not for this user — ignore
+            return;
+          }
+        } catch (e) {}
         console.log('[socket] message recv', msg.chatId, msg.id, msg.senderId, msg.text && msg.text.slice(0,40));
         // Cache any server-provided names
         try { if (msg.senderId && msg.senderName) peerNameCache.set(String(msg.senderId), msg.senderName); } catch (e) {}
@@ -728,8 +739,11 @@ subscribeAuthChange(() => {
   clearStore();
   (async () => {
     try {
-      await ensureSocket();
+      // Fetch current user profile first so `currentUserId` is known before
+      // we connect the socket. This prevents handling incoming socket
+      // messages that are unrelated to the currently authenticated user.
       await fetchCurrentUserProfile();
+      await ensureSocket();
       await loadThreadsFromServer();
     } catch (e) {}
   })();
@@ -740,8 +754,12 @@ subscribeAuthChange(() => {
   try {
     // On module init: clear any leftover in-memory state (safe-guard)
     clearStore();
-    await ensureSocket();
+    // Fetch profile first so we know the current user id before opening
+    // a socket connection. If we open the socket first, incoming messages
+    // may be handled without a known `currentUserId` and be displayed
+    // incorrectly as belonging to the current user.
     await fetchCurrentUserProfile();
+    await ensureSocket();
     await loadThreadsFromServer();
   } catch (e) {}
 })();
