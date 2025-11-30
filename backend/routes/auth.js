@@ -39,12 +39,11 @@ router.post(
     let { username, email, password, firstName, lastName, major, year, yearOfStudy, bio } = req.body;
     const normalizedYear = normalizeYearOfStudy(yearOfStudy || year);
 
-    const orQuery = [];
-    if (email) orQuery.push({ email });
-    if (username) orQuery.push({ username });
-    if (orQuery.length) {
-      const existingUser = await User.findOne({ $or: orQuery });
-      if (existingUser) return sendError(res, 400, 'User with this email or username already exists');
+    // Only enforce uniqueness on email. Usernames are allowed to collide
+    // (display names) so do not block registration on username duplicates.
+    if (email) {
+      const existingUser = await User.findOne({ email: String(email).toLowerCase() });
+      if (existingUser) return sendError(res, 400, 'User with this email already exists');
     }
 
     if (!username) {

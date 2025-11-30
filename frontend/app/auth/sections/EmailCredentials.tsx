@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, TextInput, StyleSheet, Text } from "react-native";
-import axios from 'axios';
-import { API_BASE } from '../../lib/config';
+import axios from "axios";
+import { API_BASE } from "../../lib/config";
 
 type Props = {
   emailInput: string;
@@ -12,6 +12,7 @@ type Props = {
   setConfirmPassword: (v: string) => void;
   styles: any;
   SUBTEXT?: string;
+  emailRef?: React.RefObject<any>;
 };
 
 export default function EmailCredentials({
@@ -23,6 +24,7 @@ export default function EmailCredentials({
   setConfirmPassword,
   styles,
   SUBTEXT,
+  emailRef,
 }: Props) {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
@@ -34,16 +36,18 @@ export default function EmailCredentials({
     // basic client-side format check
     const simpleEmailRegex = /\S+@\S+\.\S+/;
     if (!simpleEmailRegex.test(emailInput)) {
-      setEmailError('Please enter a valid email address');
+      setEmailError("Please enter a valid email address");
       return;
     }
 
     const t = setTimeout(async () => {
       try {
         setChecking(true);
-        const res = await axios.get(`${API_BASE}/api/auth/check-email`, { params: { email: emailInput } });
+        const res = await axios.get(`${API_BASE}/api/auth/check-email`, {
+          params: { email: emailInput },
+        });
         if (res && res.data && res.data.available === false) {
-          setEmailError('Email already in use');
+          setEmailError("Email already in use");
         } else {
           setEmailError(null);
         }
@@ -65,12 +69,15 @@ export default function EmailCredentials({
         style={styles.input}
         value={emailInput}
         onChangeText={setEmailInput}
+        ref={emailRef}
         keyboardType="email-address"
         autoCapitalize="none"
         returnKeyType="next"
       />
       {emailError ? (
-        <Text style={{ color: '#D9534F', marginTop: 6, marginLeft: 4 }}>{emailError}</Text>
+        <Text style={{ color: "#D9534F", marginTop: 6, marginLeft: 4 }}>
+          {emailError}
+        </Text>
       ) : null}
 
       <TextInput

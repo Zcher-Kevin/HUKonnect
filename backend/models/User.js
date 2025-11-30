@@ -5,7 +5,8 @@ const userSchema = new mongoose.Schema({
   username: {
     type: String,
     required: function() { return this.authProvider === 'local'; },
-    unique: true,
+    // Username is intentionally not enforced as unique to allow duplicate
+    // display names. Uniqueness is enforced for email for authentication.
     sparse: true,
     trim: true,
     minlength: [3, 'Username must be at least 3 characters long'],

@@ -83,6 +83,7 @@ export default function email() {
   >("");
   const [busy, setBusy] = useState(false);
   const submittingRef = useRef(false);
+  const emailInputRef = React.useRef<any>(null);
 
   // If the login flow passed a profile (from Google), prefill first/last name
   React.useEffect(() => {
@@ -381,9 +382,33 @@ export default function email() {
       // show a friendly error before attempting full registration.
       if (emailInput && emailInput.trim()) {
         try {
-          const chk = await axios.get(`${API_BASE}/api/auth/check-email`, { params: { email: emailInput.trim() } });
+          const chk = await axios.get(`${API_BASE}/api/auth/check-email`, {
+            params: { email: emailInput.trim() },
+          });
           if (chk?.data?.available === false) {
-            Alert.alert('Create Account', 'This email is already registered. Please log in or use a different email.');
+            // Ensure UI isn't left in a busy state and guide the user.
+            setBusy(false);
+            Alert.alert(
+              "Create Account",
+              "This email is already registered.",
+              [
+                {
+                  text: "Log in",
+                  onPress: () => router.push("/auth/login"),
+                },
+                {
+                  text: "Use different email",
+                  onPress: () => {
+                    // Focus the email input so user can edit immediately
+                    try {
+                      emailInputRef.current?.focus?.();
+                    } catch (e) {}
+                  },
+                  style: "cancel",
+                },
+              ],
+              { cancelable: true }
+            );
             return;
           }
         } catch (e) {
@@ -400,23 +425,28 @@ export default function email() {
     } catch (err: any) {
       try {
         // Log full error for debugging
-        console.error('[onCreate] registration error', err);
+        console.error("[onCreate] registration error", err);
       } catch (e) {}
       const status = err?.response?.status;
       const serverBody = err?.response?.data;
       let serverMsg = serverBody?.message;
-      if (!serverMsg && serverBody && typeof serverBody === 'object') {
+      if (!serverMsg && serverBody && typeof serverBody === "object") {
         // Try common shapes: { errors: [...] } or raw object
         if (serverBody.errors) serverMsg = JSON.stringify(serverBody.errors);
         else serverMsg = JSON.stringify(serverBody);
       }
-      const display = serverMsg || err?.message || 'Could not create your account. Please try again.';
+      const display =
+        serverMsg ||
+        err?.message ||
+        "Could not create your account. Please try again.";
       const alertMsg = status ? `Status ${status}: ${display}` : display;
       try {
-        Alert.alert('Create Account', alertMsg);
+        Alert.alert("Create Account", alertMsg);
       } catch (e) {
         // If Alert fails (rare), log as fallback
-        try { console.error('[onCreate] Alert failed', e); } catch (er) {}
+        try {
+          console.error("[onCreate] Alert failed", e);
+        } catch (er) {}
       }
     } finally {
       setBusy(false);
@@ -467,6 +497,7 @@ export default function email() {
             setConfirmPassword={setConfirmPassword}
             styles={styles}
             SUBTEXT={SUBTEXT}
+            emailRef={emailInputRef}
           />
 
           <Text style={styles.sectionTitle}>Your Information</Text>
@@ -565,7 +596,6 @@ export default function email() {
                 : "Please enter your first name to continue (or provide email + password)."}
             </Text>
           ) : null}
-
         </View>
       </ScrollView>
     </SafeAreaView>
