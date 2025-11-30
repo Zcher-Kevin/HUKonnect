@@ -81,6 +81,14 @@ router.post(
   })
 );
 
+// Check email availability (public). Returns { available: true|false }
+router.get('/check-email', asyncHandler(async (req, res) => {
+  const email = req.query.email;
+  if (!email) return sendError(res, 400, 'Email query param required');
+  const existing = await User.findOne({ email: String(email).toLowerCase() });
+  res.json({ success: true, available: !Boolean(existing) });
+}));
+
 // Login
 router.post(
   '/login',

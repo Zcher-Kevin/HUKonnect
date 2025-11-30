@@ -377,6 +377,20 @@ export default function email() {
   const onCreate = async () => {
     try {
       setBusy(true);
+      // If user provided an email, do a quick availability check so we can
+      // show a friendly error before attempting full registration.
+      if (emailInput && emailInput.trim()) {
+        try {
+          const chk = await axios.get(`${API_BASE}/api/auth/check-email`, { params: { email: emailInput.trim() } });
+          if (chk?.data?.available === false) {
+            Alert.alert('Create Account', 'This email is already registered. Please log in or use a different email.');
+            return;
+          }
+        } catch (e) {
+          // ignore check failures and proceed to allow server to validate
+        }
+      }
+
       // Call the backend to save the profile. submitProfile will throw on
       // validation or network errors which we catch below.
       await submitProfile();
@@ -384,11 +398,26 @@ export default function email() {
       router.replace("/(tabs)");
       return;
     } catch (err: any) {
-      const msg =
-        err?.response?.data?.message ||
-        (err as any)?.message ||
-        "Could not create your account. Please try again.";
-      Alert.alert("Create Account", msg);
+      try {
+        // Log full error for debugging
+        console.error('[onCreate] registration error', err);
+      } catch (e) {}
+      const status = err?.response?.status;
+      const serverBody = err?.response?.data;
+      let serverMsg = serverBody?.message;
+      if (!serverMsg && serverBody && typeof serverBody === 'object') {
+        // Try common shapes: { errors: [...] } or raw object
+        if (serverBody.errors) serverMsg = JSON.stringify(serverBody.errors);
+        else serverMsg = JSON.stringify(serverBody);
+      }
+      const display = serverMsg || err?.message || 'Could not create your account. Please try again.';
+      const alertMsg = status ? `Status ${status}: ${display}` : display;
+      try {
+        Alert.alert('Create Account', alertMsg);
+      } catch (e) {
+        // If Alert fails (rare), log as fallback
+        try { console.error('[onCreate] Alert failed', e); } catch (er) {}
+      }
     } finally {
       setBusy(false);
     }
